@@ -38,7 +38,6 @@ def _on_progress_callback(chunk: Stream, file_handle: bytes, bytes_remaining: in
     Returns:
     None
     '''
-    print(type(chunk), type(file_handle), type(bytes_remaining))
     print('MB Remaining:', bytes_remaining / 1000, 'MB')
 
 
