@@ -1,2 +1,4 @@
 .vscode/
 music/
+__pycache__/
+config.py
