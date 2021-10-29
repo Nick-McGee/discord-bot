@@ -6,9 +6,10 @@ import getAudio
 
 
 class MyClient(discord.Client):
-    def __init__(self) -> None:
+    def __init__(self, *args, **kwargs) -> None:
         self.audioManager = getAudio.getAudio()
         self.voiceClient = None
+        super().__init__(*args, **kwargs)
 
     async def on_ready(self):
         print('Logged on as {0}!'.format(self.user))
@@ -31,16 +32,13 @@ class MyClient(discord.Client):
                 return
 
             print('Playing', results[1])
-            await message.channel.send('Playing', results[1])
+            await message.channel.send('Playing ' + results[1])
 
             if self.voiceClient is None:
                 print('Connecting to', message.author.voice.channel)
                 self.voiceClient = await message.author.voice.channel.connect()
 
             self.voiceClient.play(discord.FFmpegPCMAudio(source=results[2]))
-            while self.voiceClient.is_playing():
-                sleep(1)
-            await self.voiceClient.disconnect()
 
 
 client = MyClient()

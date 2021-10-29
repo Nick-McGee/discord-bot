@@ -112,7 +112,7 @@ class getAudio:
         else:
             print(self.title, 'already downloaded.')
         
-        return (True, audio.title, './music' + self.title)
+        return (True, audio.title, './music/' + self.title)
 
 
 def main(searchQuery):
