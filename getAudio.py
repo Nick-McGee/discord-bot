@@ -13,12 +13,19 @@ pytube.request.default_range_size = 500000
 
 
 class getAudio:
+    '''
+    getAudio utilizes the PyTube library (https://pytube.io/en/latest/index.html). Call retrieveFile(query)
+    with either a YouTube URL or search query as a string. The first result will be downloaded 
+    to the directory ./music. While the object exists, the files in ./music are tracked, and if the file already
+    exists it will be returned rather than downloading the file from YouTube.
+    '''
+
     def __init__(self) -> None:
         self.title = None
         self.fileSize = None
         self.currFiles = set(os.listdir('./music'))
 
-    def cleanName(self, title: str) -> str:
+    def _cleanName(self, title: str) -> str:
         '''
         Removes unwanted characters from YouTube video title to invalid filename on filesystem.
         Source: https://stackoverflow.com/a/46801075/4364154
@@ -45,8 +52,7 @@ class getAudio:
         Returns:
         None
         '''
-        print('{0} progress: {1:.2f}%'.format(self.title,
-              100.0 - (bytes_remaining / self.fileSize) * 100.0))
+        print('{0} progress: {1:.2f}%'.format(self.title, 100.0 - (bytes_remaining / self.fileSize) * 100.0))
 
     def _on_complete_callback(self, stream: Stream, file_path: str) -> None:
         '''
@@ -62,7 +68,7 @@ class getAudio:
         '''
         print('Downloaded \"{0}\" to {1}'.format(stream.title, file_path))
 
-    def download(self, audio: YouTube, title: str) -> None:
+    def _download(self, audio: YouTube, title: str) -> None:
         '''
         Download an audio file from YouTube. Saves audio file as .mp3 to the directory 
         ./music in the current directory.
@@ -95,26 +101,23 @@ class getAudio:
         try:
             audio = Search(searchQuery)
             audio = audio.results[0]
-            self.title = self.cleanName(audio.title) + '.mp3'
+            self.title = self._cleanName(audio.title) + '.mp3'
         except:
             print('File not found.')
             return (False, 'None', 'None')
 
         if self.title not in self.currFiles:
-            self.download(audio, self.title)
+            self._download(audio, self.title)
             self.currFiles.add(self.title)
         else:
-            print(self.title, 'already downloaded!')
+            print(self.title, 'already downloaded.')
         
         return (True, audio.title, './music' + self.title)
 
 
 def main(searchQuery):
-    musicQueue = ['big iron', 'kanye west waves', 'marty robbins el paso']
-
     audioManager = getAudio()
-    for music in musicQueue:
-        print(audioManager.retrieveFile(music))
+    audioManager.retrieveFile(searchQuery)
 
 
 if __name__ == '__main__':

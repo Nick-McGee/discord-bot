@@ -2,12 +2,12 @@ from time import sleep
 import discord
 from discord.voice_client import VoiceClient
 import config
-import downloadAudio
+import getAudio
 
 
 class MyClient(discord.Client):
     def __init__(self) -> None:
-        self.audioManager = downloadAudio.getAudio()
+        self.audioManager = getAudio.getAudio()
         self.voiceClient = None
 
     async def on_ready(self):
@@ -26,17 +26,18 @@ class MyClient(discord.Client):
             results = self.audioManager.retrieveFile(message.content[6:])
 
             if not results[0]:
+                print('Failed to retrieve song.')
                 await message.channel.send('Failed to retrieve song.')
                 return
 
             print('Playing', results[1])
+            await message.channel.send('Playing', results[1])
 
             if self.voiceClient is None:
                 print('Connecting to', message.author.voice.channel)
                 self.voiceClient = await message.author.voice.channel.connect()
 
-            self.voiceClient.play(discord.FFmpegPCMAudio(
-                source=results[2]))
+            self.voiceClient.play(discord.FFmpegPCMAudio(source=results[2]))
             while self.voiceClient.is_playing():
                 sleep(1)
             await self.voiceClient.disconnect()
