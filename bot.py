@@ -1,76 +1,66 @@
 import asyncio
-from time import sleep
-import traceback
 import discord
-from discord import member
-from discord.ext import tasks, commands
-from discord.ext.commands.core import after_invoke
+from discord import activity
+from discord.ext import commands
 import config
 import getAudio
 
 bot = commands.Bot(command_prefix='!')
 audioManager = getAudio.getAudio()
-songQueue = list()
-playing = False
+playAudioQueue = asyncio.Queue()
+songQueueNames = list()
+
 
 @bot.event
 async def on_ready():
-    print('{0.user} logged on!'.format(bot))
+    print('{0} logged on!'.format(bot.user))
+    await checkQueue()
 
 @bot.command(name='play')
 async def play(ctx, *, arg):
-    try:
-        if ctx.author.voice is None:
-            print('{0.author} is not in a voice channel'.format(ctx))
-            await ctx.send('You must be in a voice channel to run this commmand.')
-            return 
-        
-        voiceChannel = ctx.author.voice.channel
-        voiceClient = bot.voice_clients[0] if len(bot.voice_clients) > 0 else None
-        if voiceClient:
-            await voiceClient.move_to(voiceChannel)
-        else:
-            voiceClient = await voiceChannel.connect()
+    if ctx.author.voice is None:
+        print('{0.author} is not in a voice channel'.format(ctx))
+        await ctx.send('You must be in a voice channel to run this commmand.')
+        return 
+    
+    voiceChannel = ctx.author.voice.channel
+    voiceClient = bot.voice_clients[0] if len(bot.voice_clients) > 0 else None
+    if voiceClient:
+        await voiceClient.move_to(voiceChannel)
+    else:
+        voiceClient = await voiceChannel.connect()
 
-        audio = audioManager.retrieveFile(arg)
-        if not audio[0]:
-            print('Failed to retrieve song.')
-            await ctx.send('Failed to retrieve ' + arg)
-            return
-        
-        songQueue.append((audio[1], audio[2]))
-        await playAudio(ctx, voiceClient)
-
-    except Exception:
-        traceback.print_exc()
-
-
-async def playAudio(ctx, voiceClient):
-    global playing
-    if playing:
+    audio = audioManager.retrieveFile(arg)
+    if not audio[0]:
+        print('Failed to retrieve song.')
+        await ctx.send('Failed to retrieve ' + arg)
         return
 
-    while len(songQueue) > 0:
-        song = songQueue.pop(0)
-        await ctx.send('Playing {0}'.format(song[0]))
+    # Queue here
+    await playAudioQueue.put(playAudio(ctx, voiceClient, audio, playAudioQueue))
+    songQueueNames.append(audio[1])
 
-        playing = True
-        voiceClient.play(discord.FFmpegPCMAudio(song[1]))
 
-        while voiceClient.is_playing():
-            await asyncio.sleep(2)
+async def playAudio(ctx, voiceClient, audio, queue=None):
+    songQueueNames.pop(0)
+    await bot.change_presence(status=discord.Status.online, activity=discord.Game(audio[1]))
+    await ctx.send('Playing {0}'.format(audio[1]))
+    voiceClient.play(discord.FFmpegPCMAudio(audio[2]))
+    while voiceClient.is_playing():
+        await asyncio.sleep(1)
+    await bot.change_presence(status=discord.Status.idle)
 
-    playing = False
-    print('thread finished')
+    if queue:
+        print('thread finished')
+        queue.task_done()
 
 
 @bot.command(name='queue')
 async def queue(ctx):
-    if len(songQueue) == 0:
+    if len(songQueueNames) == 0:
         await ctx.send('There are currently no songs in the queue.')
     else:
-        songList = [song[0] for song in songQueue]
-        songList = '\n'.join(songList)
+        songList = '\n'.join(songQueueNames)
         await ctx.send('Song queue:\n' + songList)
 
 
@@ -80,5 +70,14 @@ async def on_voice_state_update(member, before, after):
         print('Peepo connected to voice channel {0}'.format(after.channel.name))
     elif member == bot.user and after.channel is None:
         print('Peepo left voice channel {0}'.format(before.channel.name))
+
+
+async def checkQueue():
+    while True:
+        if not playAudioQueue.empty():
+            co = await playAudioQueue.get()
+            await co
+        else:
+            await asyncio.sleep(1)
 
 bot.run(config.token)
