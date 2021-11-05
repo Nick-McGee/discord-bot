@@ -1,16 +1,17 @@
 import asyncio
 import discord
 from discord.ext import commands
+from pytube import Playlist
 import config
 import getAudio
 
 class MusicBot(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.voiceClient = None
         self.audioManager = getAudio.getAudio()
         self.playAudioQueue = asyncio.Queue()
         self.songQueueNames = list()
-        self.voiceClient = None
 
 
     @commands.command()
@@ -19,7 +20,7 @@ class MusicBot(commands.Cog):
             return
 
         audio = self.audioManager.retrieveFile(arg)
-        if not audio[0]:
+        if not audio['results']:
             print('Failed to retrieve song.')
             await ctx.send('Failed to retrieve ' + arg)
             return
@@ -27,18 +28,37 @@ class MusicBot(commands.Cog):
         await self.connectToVoice(ctx)
 
         await self.playAudioQueue.put(self.playAudio(ctx, audio, self.playAudioQueue))
-        self.songQueueNames.append(audio[1])
+        self.songQueueNames.append(audio['title'])
+
+    @commands.command()
+    async def playlist(self, ctx, *, arg):          
+        if not await self.isInVoice(ctx):
+            return
+        
+        if not arg[0].find('playlist'):
+            print('This is not a playlist.')
+            await ctx.send('This is not a playlist.')
+
+        playlist = Playlist(arg)
+        print(playlist)
+        for url in playlist:
+            audio = self.audioManager.retrieveFile(url)
+            if not audio['results']:
+                print('Failed to retrieve song.')
+                await ctx.send('Failed to retrieve ' + url)
+            
+            await self.connectToVoice(ctx)
+
+            await self.playAudioQueue.put(self.playAudio(ctx, audio, self.playAudioQueue))
+            self.songQueueNames.append(audio['title'])
 
 
     async def playAudio(self, ctx, audio, queue=None):
         self.songQueueNames.pop(0)
-        await self.bot.change_presence(status=discord.Status.online, activity=discord.Game(audio[1]))
-        await ctx.send('Playing {0}'.format(audio[1]))
+        await self.bot.change_presence(status=discord.Status.online, activity=discord.Game(audio['title']))
+        await ctx.send('Playing {0}'.format(audio['title']))
 
-        # print('PLAY AUDIO VOICE CHANNEL:', self.voiceClient.channel)
-        # await asyncio.sleep(2)
-
-        self.voiceClient.play(discord.FFmpegPCMAudio(audio[2]))
+        self.voiceClient.play(discord.FFmpegPCMAudio(audio['directory']))
         while self.voiceClient.is_playing():
             await asyncio.sleep(0.5)
         await self.bot.change_presence(status=discord.Status.idle)
@@ -88,7 +108,6 @@ class MusicBot(commands.Cog):
     async def connectToVoice(self, ctx):
         voiceChannel = ctx.author.voice.channel
 
-        # self.voiceClient = self.bot.voice_clients[0] if len(self.bot.voice_clients) > 0 else None
         if self.voiceClient:
             await self.voiceClient.move_to(voiceChannel)
             await self.bot.wait_for('voice_state_update')

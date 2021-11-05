@@ -52,7 +52,7 @@ class getAudio:
         Returns:
         None
         '''
-        print('{0} progress: {1:.2f}%'.format(self.title, 100.0 - (bytes_remaining / self.fileSize) * 100.0))
+        print('getAudio.py: {0} progress: {1:.2f}%'.format(self.title, 100.0 - (bytes_remaining / self.fileSize) * 100.0))
 
     def _on_complete_callback(self, stream: Stream, file_path: str) -> None:
         '''
@@ -66,7 +66,7 @@ class getAudio:
         Returns:
         None
         '''
-        print('Downloaded \"{0}\" to {1}'.format(stream.title, file_path))
+        print('getAudio.py: Downloaded \"{0}\" to {1}'.format(stream.title, file_path))
 
     def _download(self, audio: YouTube, title: str) -> None:
         '''
@@ -93,26 +93,30 @@ class getAudio:
         search text is used, the first search result will be downloaded.
 
         Parameters:
-        searchQuery (str): 
+        searchQuery (str): A search query or YouTube URL.
 
         Return:
         list(bool, str, str): Return if file retrieved, the YouTube title name, and the filepath.
         '''
         try:
-            audio = Search(searchQuery)
-            audio = audio.results[0]
-            self.title = self._cleanName(audio.title) + '.mp3'
-        except:
-            print('File not found.')
-            return (False, 'None', 'None')
+            if searchQuery[0:5] == 'https':
+                audio = YouTube(searchQuery)
+            else:
+                audio = Search(searchQuery)         
+                audio = audio.results[0]
+        except Exception as e:
+            print('getAudio.py retrieveFile:', e)
+            return {'results': False, 'title': None, 'directory': None}
+
+        self.title = self._cleanName(audio.title) + '.mp3'
 
         if self.title not in self.currFiles:
             self._download(audio, self.title)
             self.currFiles.add(self.title)
         else:
-            print(self.title, 'already downloaded.')
+            print('getAudio.py retrieveFile:', self.title, 'already downloaded.')
         
-        return (True, audio.title, './music/' + self.title)
+        return {'results': True, 'title': audio.title, 'directory': './music/' + self.title}
 
 
 def main(searchQuery):
@@ -121,7 +125,7 @@ def main(searchQuery):
 
 
 if __name__ == '__main__':
-    if len(sys.argv) > 2:
-        main(sys.argv[1:])
+    if len(sys.argv) > 1:
+        main(' '.join(sys.argv[1:]))
     else:
         print('ERROR: No search query given.')
