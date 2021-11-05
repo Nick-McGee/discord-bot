@@ -23,7 +23,6 @@ class getAudio:
     def __init__(self) -> None:
         self.title = None
         self.fileSize = None
-        self.currFiles = set(os.listdir('./music'))
 
     def _cleanName(self, title: str) -> str:
         '''
@@ -109,13 +108,7 @@ class getAudio:
             return {'results': False, 'title': None, 'directory': None}
 
         self.title = self._cleanName(audio.title) + '.mp3'
-
-        if self.title not in self.currFiles:
-            self._download(audio, self.title)
-            self.currFiles.add(self.title)
-        else:
-            print('getAudio.py retrieveFile:', self.title, 'already downloaded.')
-        
+        self._download(audio, self.title)
         return {'results': True, 'title': audio.title, 'directory': './music/' + self.title}
 
 
