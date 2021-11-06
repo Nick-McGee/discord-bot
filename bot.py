@@ -4,7 +4,10 @@ from discord.ext import commands
 from pytube import Playlist
 import config
 import getAudio
+from queue import PriorityQueue
+from threading import Thread
 
+# Max file size an audio file can be, in bytes.
 maxFileSize = 200000000
 
 class MusicBot(commands.Cog):
@@ -12,8 +15,9 @@ class MusicBot(commands.Cog):
         self.bot = bot
         self.voiceClient = None
         self.audioManager = getAudio.GetAudio(maxFileSize)
-        self.playAudioQueue = asyncio.Queue()
-        self.songQueueNames = list()
+        self.playAudioQueue = asyncio.PriorityQueue()
+        self.songsNamesQueue = PriorityQueue()
+        self.queueNumber = 0
 
 
     @commands.command()
@@ -25,12 +29,12 @@ class MusicBot(commands.Cog):
         if not audio.results:
             print('Failed to retrieve song.')
             await ctx.send('Failed to retrieve ' + arg)
-            return
-        
-        await self.connectToVoice(ctx)
+        else:        
+            await self.connectToVoice(ctx)
+            self.queueNumber += 1
+            await self.playAudioQueue.put((self.queueNumber, self.playAudio(ctx, audio, self.playAudioQueue)))
+            self.songsNamesQueue.put((self.queueNumber, audio.title))
 
-        await self.playAudioQueue.put(self.playAudio(ctx, audio, self.playAudioQueue))
-        self.songQueueNames.append(audio.title)
 
     @commands.command()
     async def playlist(self, ctx, *, arg):          
@@ -42,21 +46,31 @@ class MusicBot(commands.Cog):
             await ctx.send('This is not a playlist.')
 
         playlist = Playlist(arg)
-        print(playlist)
+
+        playlistQueueNumber = self.queueNumber
+        self.queueNumber += len(playlist)
+
+        Thread(target = self.testFunction, args=(playlist.videos, playlistQueueNumber)).start()
+
         for url in playlist:
+            playlistQueueNumber += 1
             audio = self.audioManager.retrieveFile(url)
+
             if not audio.results:
                 print('Failed to retrieve song.')
                 await ctx.send('Failed to retrieve ' + url)
-            
-            await self.connectToVoice(ctx)
+            else:
+                await self.connectToVoice(ctx)
+                await self.playAudioQueue.put((playlistQueueNumber, self.playAudio(ctx, audio, self.playAudioQueue)))
 
-            await self.playAudioQueue.put(self.playAudio(ctx, audio, self.playAudioQueue))
-            self.songQueueNames.append(audio.title)
+
+    def testFunction(self, videos, queueNum):
+        for idx, ytvid in enumerate(videos):
+            self.songsNamesQueue.put((queueNum + idx, ytvid.title))
 
 
     async def playAudio(self, ctx, audio, queue=None):
-        self.songQueueNames.pop(0)
+        self.songsNamesQueue.get()
         await self.bot.change_presence(status=discord.Status.online, activity=discord.Game(audio.title))
         await ctx.send('Playing {0}'.format(audio.title))
 
@@ -74,12 +88,13 @@ class MusicBot(commands.Cog):
         if not await self.isInVoice(ctx):
             return
 
-        if len(self.songQueueNames) == 0:
+        if self.songsNamesQueue.empty():
             await ctx.send('There are currently no songs in the queue.')
         else:
             songList = ""
-            for idx, songName in enumerate(self.songQueueNames):
-                songList += str(idx+1) + ') ' + songName + '\n'
+            toPrint = sorted(self.songsNamesQueue.queue, key=lambda x: x[0])
+            for idx, songName in enumerate(toPrint):
+                songList += str(idx+1) + ') ' + songName[1] + '\n'
             await ctx.send('Song queue:\n```' + songList + '```')
 
 
@@ -102,9 +117,9 @@ class MusicBot(commands.Cog):
         if self.voiceClient is None or not self.voiceClient.is_playing():
             await ctx.send('Cannot clear queue.')
         else:
-            self.playAudioQueue = asyncio.Queue()
-            self.songQueueNames = list()
             self.voiceClient.stop()
+            self.playAudioQueue = asyncio.Queue()
+            self.songsNamesQueue = PriorityQueue()
 
 
     async def connectToVoice(self, ctx):
@@ -130,7 +145,7 @@ class MusicBot(commands.Cog):
         while True:
             if not self.playAudioQueue.empty():
                 song = await self.playAudioQueue.get()
-                await song
+                await song[1]
             else:
                 await asyncio.sleep(0.5)
 
