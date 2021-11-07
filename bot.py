@@ -1,11 +1,11 @@
 import asyncio
+from asyncio import tasks
 import discord
 from discord.ext import commands
 from pytube import Playlist
 import config
 import getAudio
 from queue import PriorityQueue
-from threading import Thread
 
 # Max file size an audio file can be, in bytes.
 maxFileSize = 200000000
@@ -16,8 +16,10 @@ class MusicBot(commands.Cog):
         self.voiceClient = None
         self.audioManager = getAudio.GetAudio(maxFileSize)
         self.playAudioQueue = asyncio.PriorityQueue()
+        self.playlistQueue = list()
         self.songsNamesQueue = PriorityQueue()
         self.queueNumber = 0
+        self.currSong = None
 
 
     @commands.command()
@@ -35,9 +37,13 @@ class MusicBot(commands.Cog):
             await self.playAudioQueue.put((self.queueNumber, self.playAudio(ctx, audio, self.playAudioQueue)))
             self.songsNamesQueue.put((self.queueNumber, audio.title))
 
+    @commands.command()
+    async def playlist(self, ctx, *, arg): 
+        print('added playlist')
+        self.playlistQueue.append(asyncio.create_task(self._playlist(ctx, arg)))
 
     @commands.command()
-    async def playlist(self, ctx, *, arg):          
+    async def _playlist(self, ctx, arg):          
         if not await self.isInVoice(ctx):
             return
         
@@ -50,7 +56,7 @@ class MusicBot(commands.Cog):
         playlistQueueNumber = self.queueNumber
         self.queueNumber += len(playlist)
 
-        Thread(target = self.testFunction, args=(playlist.videos, playlistQueueNumber)).start()
+        self.playlistQueue.append(asyncio.create_task(self.testFunction(playlist.videos, playlistQueueNumber)))
 
         for url in playlist:
             playlistQueueNumber += 1
@@ -64,7 +70,7 @@ class MusicBot(commands.Cog):
                 await self.playAudioQueue.put((playlistQueueNumber, self.playAudio(ctx, audio, self.playAudioQueue)))
 
 
-    def testFunction(self, videos, queueNum):
+    async def testFunction(self, videos, queueNum):
         for idx, ytvid in enumerate(videos):
             self.songsNamesQueue.put((queueNum + idx, ytvid.title))
 
@@ -73,11 +79,13 @@ class MusicBot(commands.Cog):
         self.songsNamesQueue.get()
         await self.bot.change_presence(status=discord.Status.online, activity=discord.Game(audio.title))
         await ctx.send('Playing {0}'.format(audio.title))
+        self.currSong = audio.title
 
         self.voiceClient.play(discord.FFmpegPCMAudio(audio.directory))
         while self.voiceClient.is_playing():
             await asyncio.sleep(0.5)
         await self.bot.change_presence(status=discord.Status.idle)
+        self.currSong = None
 
         if queue:
             queue.task_done()
@@ -96,6 +104,14 @@ class MusicBot(commands.Cog):
             for idx, songName in enumerate(toPrint):
                 songList += str(idx+1) + ') ' + songName[1] + '\n'
             await ctx.send('Song queue:\n```' + songList + '```')
+    
+
+    @commands.command()
+    async def nowPlaying(self, ctx):
+        if not await self.isInVoice(ctx):
+            return
+        if self.currSong:
+            await ctx.send('Now playing: {0}.'.format(self.currSong))
 
 
     @commands.command()
@@ -114,12 +130,15 @@ class MusicBot(commands.Cog):
         if not await self.isInVoice(ctx):
             return
 
-        if self.voiceClient is None or not self.voiceClient.is_playing():
-            await ctx.send('Cannot clear queue.')
-        else:
-            self.voiceClient.stop()
-            self.playAudioQueue = asyncio.Queue()
-            self.songsNamesQueue = PriorityQueue()
+        self.voiceClient.stop()
+        for task in self.playlistQueue:
+            task.cancel()
+        self.playAudioQueue = asyncio.Queue()
+        self.songsNamesQueue = PriorityQueue()
+        self.currSong = None
+        await self.bot.change_presence(status=discord.Status.idle)
+        print('Cleared queue.')
+        await ctx.send('Cleared queue.')
 
 
     async def connectToVoice(self, ctx):
@@ -147,7 +166,7 @@ class MusicBot(commands.Cog):
                 song = await self.playAudioQueue.get()
                 await song[1]
             else:
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(0.5)                
 
 
 bot = commands.Bot(command_prefix='!')
@@ -157,6 +176,7 @@ musicBot = MusicBot(bot)
 @bot.event
 async def on_ready():
     print('{0} logged on!'.format(bot.user))
+    await bot.change_presence(status=discord.Status.idle)
     await musicBot.checkQueue()
 
 
