@@ -15,7 +15,8 @@ class streamBot(commands.Cog):
     def __init__(self, client):
         self.client = client
         self.voice = None
-        self.songQueue = list()
+        self.queuePosition = 0
+        self.songQueue = PriorityQueue()
         self.isPlaying = False
         self.nowPlaying = None
         self.songLength = 0
@@ -26,10 +27,10 @@ class streamBot(commands.Cog):
         '''
         Loop through the song queue and play it if it can.
         '''
-        if len(self.songQueue) > 0 and self.isPlaying is False:
+        if not self.songQueue.empty() and self.isPlaying is False:
             print('Queue pulled a song.')
-            song = self.songQueue.pop(0)
-            await self.playAudio(song[0], song[1])
+            song = self.songQueue.get()
+            await self.playAudio(song[1], song[2], song[3], song[4])
 
 
     @commands.command()
@@ -37,10 +38,13 @@ class streamBot(commands.Cog):
         '''
         Queue up queries.
         '''
-        print('queued a song!')
         if not await self.isInVoice(ctx):
             return
-        self.songQueue.append((ctx, arg))
+        await self.connectToVoice(ctx)
+
+        audio, title, duration = await self.findAudio(arg)
+        self.queuePosition += 1
+        self.songQueue.put((self.queuePosition, ctx, audio, title, duration))
 
 
     @commands.command()
@@ -50,7 +54,30 @@ class streamBot(commands.Cog):
         '''
         if not await self.isInVoice(ctx):
             return
-        pass
+        
+        await self.send_message(ctx, 'green', ('Downloading Playlist', 'This may take a moment'))
+
+        with yt({'format': 'bestaudio', 'age_limit': '21'}) as ytdl:
+            try:
+                ytdl.cache.clear()
+            except:
+                print('No cache to clear.')
+
+            try:
+                requests.get(arg)
+                results = ytdl.extract_info(arg, download=False)
+            except:
+                await self.send_message(ctx, 'red', ('Error', 'Unable to retrieve playlist'))
+
+            entries = results['entries']
+
+            internalQueuePosition = 0
+            internalMaxQueuePosition = len(entries)
+            self.queuePosition += internalMaxQueuePosition
+
+            for entry in entries:
+                self.songQueue.put((internalQueuePosition, ctx, entry['formats'][0]['url'], entry['title'], entry['duration']))
+                internalQueuePosition += 1
 
 
     async def findAudio(self, search):
@@ -59,31 +86,31 @@ class streamBot(commands.Cog):
         '''
         with yt({'format': 'bestaudio', 'age_limit': '21', 'noplaylist': 'True'}) as ytdl:
             try:
+                ytdl.cache.clear()
                 requests.get(search)
             except:
                 info = ytdl.extract_info(f"ytsearch:{search}", download=False)['entries'][0]
             else:
                 info = ytdl.extract_info(search, download=False)
-        return (info, info['formats'][0]['url'])
+        return (info['formats'][0]['url'], info['title'], info['duration'])
 
 
-    async def playAudio(self, ctx, search):
+    async def playAudio(self, ctx, audio, title, duration):
         '''
         Play songs from the queue
         '''
         self.isPlaying = True
-        video, source = await self.findAudio(search)
 
         await self.connectToVoice(ctx)
-        await self.send_message(ctx, 'green', ('Now Playing', f'{video["title"]}'), ('Length', time.strftime('%H:%M:%S', time.gmtime(video['duration']))))
-        self.nowPlaying = video['title']
-        self.songLength = video['duration'] + time.mktime(time.localtime())
+        await self.send_message(ctx, 'green', ('Now Playing', f'{title}'), ('Length', time.strftime('%H:%M:%S', time.gmtime(duration))))
+        self.nowPlaying = title
+        self.songLength = duration + time.mktime(time.localtime())
 
         def update(e: None):
             self.nowPlaying = None
             self.songLength = 0
             self.isPlaying = False
-        self.voice.play(FFmpegPCMAudio(source, **FFMPEG_OPTS), after=update)
+        self.voice.play(FFmpegPCMAudio(audio, **FFMPEG_OPTS), after=update)
 
 
     async def connectToVoice(self, ctx):
@@ -115,17 +142,31 @@ class streamBot(commands.Cog):
 
 
     @commands.command()
-    async def queue(self, ctx):
+    async def queue(self, ctx, *, arg=5):
         '''
         Show how many songs are in the queue.
         '''
         if not await self.isInVoice(ctx):
             return
+                
+        sortedSongs = sorted(self.songQueue.queue, key=lambda x: x[0])
+
+        totalTime = 0
+        songNames = list()
+        for song in sortedSongs:
+            songNames.append(song[3])
+            totalTime += song[4]
         
-        if len(self.songQueue) <= 0:
+        upNextCount = min(arg, self.songQueue.qsize())
+        songNames = songNames[0:upNextCount]
+        songNames = '\n'.join(songNames)
+
+        if self.songQueue.empty():
             await self.send_message(ctx, 'orange', ('The queue is empty', 'Use !play or !playlist to play a song'))
+        elif self.songQueue.qsize() == 1:
+            await self.send_message(ctx, 'green', ('Queue', f'There is currently 1 song in the queue'), ('Next song', songNames), ('Total time', time.strftime('%H:%M:%S', time.gmtime(totalTime))))
         else:
-            await self.send_message(ctx, 'green', ('Queue', f'There are currently {len(self.songQueue)} songs in the queue'))
+            await self.send_message(ctx, 'green', ('Queue', f'There are currently {self.songQueue.qsize()} songs in the queue'), (f'Next {upNextCount} songs', songNames), ('Total time', time.strftime('%H:%M:%S', time.gmtime(totalTime))))
 
 
     @commands.command()
@@ -156,13 +197,13 @@ class streamBot(commands.Cog):
         if self.voice is None or not self.voice.is_playing():
             await self.send_message(ctx, 'orange', ('Cannot clear queue', 'There are no songs in the queue'))
         else:
-            self.songQueue = list()
+            self.songQueue = PriorityQueue()
             await self.send_message(ctx, 'green', ('Clearing', 'Cleared queue of songs'))
             self.voice.stop()
 
 
     @commands.command()
-    async def debug(self, ctx, *, arg):
+    async def debug(self, ctx):
         '''
         For internal use. Should display memory and CPU usage.
         '''
