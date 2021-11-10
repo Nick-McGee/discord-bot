@@ -141,6 +141,14 @@ class streamBot(commands.Cog):
             self.voice = await voiceChannel.connect()
 
 
+    async def isInVoice(self, ctx):
+        if ctx.author.voice is None:
+            await self.send_message(ctx, 'red', None, ('Error', 'You must be in a voice channel to run this command'))
+            return False
+        else:
+            return True
+
+
     @commands.command()
     async def now(self, ctx):
         '''
@@ -225,13 +233,24 @@ class streamBot(commands.Cog):
         await self.send_message(ctx, 'green', None, ('Current memory usage', '{:.2f} MB'.format(psutil.Process(os.getpid()).memory_info().rss / 1024 ** 2)), ('Current CPU usage', '{:.2f}%'.format(psutil.cpu_percent())))
 
 
+    @commands.command()
+    async def help(self, ctx):
+        await self.send_message(ctx, 'green', None, 
+        ('Play', 'Plays a YouTube audio file. Needs a search query or YouTube URL\nExample:\n!play big iron\n!play https://www.youtube.com/watch?v=dQw4w9WgXcQ'),
+        ('Playlist', 'Plays a YouTube playlist. Needs a YouTube playlist URL\nExample:\n!playlist https://www.youtube.com/playlist?list=PLlW4ryhNwVgBfFH8C_cUIjauhQUnwYy-z'),
+        ('Queue', 'Displays how many songs in the queue, total time of queue, and up next songs. By default up next is max 5, by can be passed in a number to show more\nExample:\n!queue\n!queue 10'),
+        ('Now', 'Displays the currently playing song, and how much time it has left\nExample:\n!now'),
+        ('Skip', 'Skips the currently playing song, and will play the next song in the queue\nExample:\n!skip'),
+        ('Clear', 'Clears the queue of songs and stops the currently playing song\nExample:\n!clear'))
+
+
     async def send_message(self, ctx, color, img, *content):
         '''
         Send an embed to the chat.
         Can be configured with color and content.
 
         Example:
-        await self.send_message(ctx, 'red', ('Error', 'Error Message'), ('Extra Details', 'Details'))
+        await self.send_message(ctx, 'red', None, ('Error', 'Error Message'), ('Extra Details', 'Details'))
         '''
         embed = discord.Embed()
         if color == 'green':
@@ -249,14 +268,12 @@ class streamBot(commands.Cog):
         if img:
             embed.set_image(url=img)
 
-        print(ctx)
-
         await ctx.send(embed=embed)
 
 
 
     '''
-    EVENT LISTENERS AND CHECKS
+    EVENT LISTENERS
     '''
     @commands.Cog.listener()
     async def on_ready(self):
@@ -268,34 +285,40 @@ class streamBot(commands.Cog):
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
         if member == self.client.user and before.channel is None:
-            print('{0} connected to voice channel {1}.'.format(self.client.user, after.channel.name))
+            print('{0} connected to voice channel {1}'.format(self.client.user, after.channel.name))
         elif member == self.client.user and before.channel is not None and after.channel is not None:
-            print('{0} moved from voice channel {1} to {2}.'.format(self.client.user, before.channel.name, after.channel.name))
-        elif member == bot.user and after.channel is None:
-            print('{0} left voice channel {1}.'.format(self.client.user, before.channel.name))
+            print('{0} moved from voice channel {1} to {2}'.format(self.client.user, before.channel.name, after.channel.name))
+        elif member == self.client and after.channel is None:
+            print('{0} left voice channel {1}'.format(self.client.user, before.channel.name))
 
 
-    # Might not need this
-    # https://www.youtube.com/watch?v=_2ifplRzQtM
+
+    '''ERROR HANDLERS'''
     @commands.Cog.listener()
     async def on_command_error(self, ctx, error):
-        if isinstance(error, commands.MissingRequiredArgument):
-            await self.send_message(ctx, 'red', None, ('Error', 'Missing Required Argument'))
-        elif isinstance(error, commands.CommandNotFound):
+        if isinstance(error, commands.CommandNotFound):
             await self.send_message(ctx, 'red', None, ('Error', 'Invalid Command'))
         else:
             print(error)
     
+
+    @play.error
+    async def play_error(self, ctx, error):
+        if isinstance(error, commands.MissingRequiredArgument):
+            await self.send_message(ctx, 'red', None, ('Error', 'You must give a search query or YouTube URL to play a video\n\nExample:\n!play big iron'))
     
-    async def isInVoice(self, ctx):
-        if ctx.author.voice is None:
-            await self.send_message(ctx, 'red', None, ('Error', 'You must be in a voice channel to run this command'))
-            return False
-        else:
-            return True
+
+    @playlist.error
+    async def playlist_error(self, ctx, error):
+        if isinstance(error, commands.MissingRequiredArgument):
+            await self.send_message(ctx, 'red', None, ('Error', 'You must give a YouTube Playlist URL to play a video\n\nExample:\n!playlist https://www.youtube.com/playlist?list=PLlW4ryhNwVgBfFH8C_cUIjauhQUnwYy-z'))
 
 
+def main():
+    bot = commands.Bot(command_prefix='!', help_command=None)
+    bot.add_cog(streamBot(bot))
+    bot.run(config.token)
 
-bot = commands.Bot(command_prefix='!')
-bot.add_cog(streamBot(bot))
-bot.run(config.token)
+
+if __name__ == '__main__':
+    main()
