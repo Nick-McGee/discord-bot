@@ -1,10 +1,12 @@
-import time
-from youtube_dl import YoutubeDL as yt
-import requests
+import asyncio
 import discord
 from discord import FFmpegPCMAudio
 from discord.ext import commands, tasks
+from youtube_dl import YoutubeDL as yt
+import requests
+import time
 from queue import PriorityQueue
+import os, psutil
 import config
 
 
@@ -19,6 +21,7 @@ class streamBot(commands.Cog):
         self.songQueue = PriorityQueue()
         self.isPlaying = False
         self.nowPlaying = None
+        self.songThumbnail = None
         self.songLength = 0
 
 
@@ -28,9 +31,8 @@ class streamBot(commands.Cog):
         Loop through the song queue and play it if it can.
         '''
         if not self.songQueue.empty() and self.isPlaying is False:
-            print('Queue pulled a song.')
             song = self.songQueue.get()
-            await self.playAudio(song[1], song[2], song[3], song[4])
+            await self.playAudio(song[1], song[2], song[3], song[4], song[5])
 
 
     @commands.command()
@@ -40,11 +42,10 @@ class streamBot(commands.Cog):
         '''
         if not await self.isInVoice(ctx):
             return
-        await self.connectToVoice(ctx)
 
-        audio, title, duration = await self.findAudio(arg)
+        audio, title, duration, thumbnail = await self.findAudio(arg)
         self.queuePosition += 1
-        self.songQueue.put((self.queuePosition, ctx, audio, title, duration))
+        self.songQueue.put((self.queuePosition, ctx, audio, title, duration, thumbnail))
 
 
     @commands.command()
@@ -55,7 +56,7 @@ class streamBot(commands.Cog):
         if not await self.isInVoice(ctx):
             return
         
-        await self.send_message(ctx, 'green', ('Downloading Playlist', 'This may take a moment'))
+        await self.send_message(ctx, 'green', None, ('Downloading Playlist', 'This may take a moment'))
 
         with yt({'format': 'bestaudio', 'age_limit': '21'}) as ytdl:
             try:
@@ -67,7 +68,7 @@ class streamBot(commands.Cog):
                 requests.get(arg)
                 results = ytdl.extract_info(arg, download=False)
             except:
-                await self.send_message(ctx, 'red', ('Error', 'Unable to retrieve playlist'))
+                await self.send_message(ctx, 'red', None, ('Error', 'Unable to retrieve playlist'))
 
             entries = results['entries']
 
@@ -76,7 +77,7 @@ class streamBot(commands.Cog):
             self.queuePosition += internalMaxQueuePosition
 
             for entry in entries:
-                self.songQueue.put((internalQueuePosition, ctx, entry['formats'][0]['url'], entry['title'], entry['duration']))
+                self.songQueue.put((internalQueuePosition, ctx, entry['formats'][0]['url'], entry['title'], entry['duration'], entry['thumbnail']))
                 internalQueuePosition += 1
 
 
@@ -92,25 +93,40 @@ class streamBot(commands.Cog):
                 info = ytdl.extract_info(f"ytsearch:{search}", download=False)['entries'][0]
             else:
                 info = ytdl.extract_info(search, download=False)
-        return (info['formats'][0]['url'], info['title'], info['duration'])
+        
+        return (info['formats'][0]['url'], info['title'], info['duration'], info['thumbnail'])
 
 
-    async def playAudio(self, ctx, audio, title, duration):
+    async def playAudio(self, ctx, audio, title, duration, thumbnail):
         '''
         Play songs from the queue
         '''
         self.isPlaying = True
 
-        await self.connectToVoice(ctx)
-        await self.send_message(ctx, 'green', ('Now Playing', f'{title}'), ('Length', time.strftime('%H:%M:%S', time.gmtime(duration))))
+        await self.send_message(ctx, 'green', thumbnail, ('Now Playing', f'{title}'), ('Length', time.strftime('%H:%M:%S', time.gmtime(duration))))
+        print('Playing:', title)
         self.nowPlaying = title
+        self.songThumbnail = thumbnail
         self.songLength = duration + time.mktime(time.localtime())
 
         def update(e: None):
             self.nowPlaying = None
             self.songLength = 0
+            self.songThumbnail = None
             self.isPlaying = False
-        self.voice.play(FFmpegPCMAudio(audio, **FFMPEG_OPTS), after=update)
+
+        # Works, but can be spammy if bot disconnect.
+        await self.connectToVoice(ctx)
+        timeout = 0
+        while timeout < 5:
+            try:
+                self.voice.play(FFmpegPCMAudio(audio, **FFMPEG_OPTS), after=update)
+            except:
+                await self.connectToVoice(ctx)
+                await asyncio.sleep(1)
+                timeout += 1
+            else:
+                timeout = 10
 
 
     async def connectToVoice(self, ctx):
@@ -121,7 +137,6 @@ class streamBot(commands.Cog):
 
         if self.voice:
             await self.voice.move_to(voiceChannel)
-            await bot.wait_for('voice_state_update')
         else:
             self.voice = await voiceChannel.connect()
 
@@ -135,10 +150,10 @@ class streamBot(commands.Cog):
             return
         
         if not self.nowPlaying:
-            await self.send_message(ctx, 'orange', ('There isn\'t a song currently playing', 'Use !play or !playlist to play a song'))
+            await self.send_message(ctx, 'orange', None, ('There isn\'t a song currently playing', 'Use !play or !playlist to play a song'))
 
         timeLeft = self.songLength - time.mktime(time.localtime())
-        await self.send_message(ctx, 'green', ('Now Playing', self.nowPlaying), ('Time left', time.strftime('%H:%M:%S', time.gmtime(timeLeft))))
+        await self.send_message(ctx, 'green', self.songThumbnail, ('Now Playing', self.nowPlaying), ('Time left', time.strftime('%H:%M:%S', time.gmtime(timeLeft))))
 
 
     @commands.command()
@@ -162,11 +177,11 @@ class streamBot(commands.Cog):
         songNames = '\n'.join(songNames)
 
         if self.songQueue.empty():
-            await self.send_message(ctx, 'orange', ('The queue is empty', 'Use !play or !playlist to play a song'))
+            await self.send_message(ctx, 'orange', None, ('The queue is empty', 'Use !play or !playlist to play a song'))
         elif self.songQueue.qsize() == 1:
-            await self.send_message(ctx, 'green', ('Queue', f'There is currently 1 song in the queue'), ('Next song', songNames), ('Total time', time.strftime('%H:%M:%S', time.gmtime(totalTime))))
+            await self.send_message(ctx, 'green', None, ('Queue', f'There is currently 1 song in the queue'), ('Next song', songNames), ('Total time', time.strftime('%H:%M:%S', time.gmtime(totalTime))))
         else:
-            await self.send_message(ctx, 'green', ('Queue', f'There are currently {self.songQueue.qsize()} songs in the queue'), (f'Next {upNextCount} songs', songNames), ('Total time', time.strftime('%H:%M:%S', time.gmtime(totalTime))))
+            await self.send_message(ctx, 'green', None, ('Queue', f'There are currently {self.songQueue.qsize()} songs in the queue'), (f'Next {upNextCount} songs', songNames), ('Total time', time.strftime('%H:%M:%S', time.gmtime(totalTime))))
 
 
     @commands.command()
@@ -178,9 +193,9 @@ class streamBot(commands.Cog):
             return
 
         if self.voice is None or not self.voice.is_playing():
-            await self.send_message(ctx, 'orange', ('Cannot skip song', 'A song is not playing'))
+            await self.send_message(ctx, 'orange', None, ('Cannot skip song', 'A song is not playing'))
         else:
-            await self.send_message(ctx, 'green', ('Skipping', f'Skipping {self.nowPlaying}'))
+            await self.send_message(ctx, 'green', None, ('Skipping', f'Skipping {self.nowPlaying}'))
             self.voice.stop()
 
 
@@ -195,22 +210,22 @@ class streamBot(commands.Cog):
             return
 
         if self.voice is None or not self.voice.is_playing():
-            await self.send_message(ctx, 'orange', ('Cannot clear queue', 'There are no songs in the queue'))
+            await self.send_message(ctx, 'orange', None, ('Cannot clear queue', 'There are no songs in the queue'))
         else:
             self.songQueue = PriorityQueue()
-            await self.send_message(ctx, 'green', ('Clearing', 'Cleared queue of songs'))
+            await self.send_message(ctx, 'green', None, ('Clearing', 'Cleared queue of songs'))
             self.voice.stop()
 
 
     @commands.command()
-    async def debug(self, ctx):
+    async def stats(self, ctx):
         '''
-        For internal use. Should display memory and CPU usage.
+        For internal use. Displays CPU and memory usage
         '''
-        pass
+        await self.send_message(ctx, 'green', None, ('Current memory usage', '{:.2f} MB'.format(psutil.Process(os.getpid()).memory_info().rss / 1024 ** 2)), ('Current CPU usage', '{:.2f}%'.format(psutil.cpu_percent())))
 
 
-    async def send_message(self, ctx, color, *content):
+    async def send_message(self, ctx, color, img, *content):
         '''
         Send an embed to the chat.
         Can be configured with color and content.
@@ -230,6 +245,11 @@ class streamBot(commands.Cog):
         
         for name, value in content:
             embed.add_field(name=name, value=value, inline=False)
+
+        if img:
+            embed.set_image(url=img)
+
+        print(ctx)
 
         await ctx.send(embed=embed)
 
@@ -260,14 +280,16 @@ class streamBot(commands.Cog):
     @commands.Cog.listener()
     async def on_command_error(self, ctx, error):
         if isinstance(error, commands.MissingRequiredArgument):
-            await self.send_message(ctx, 'red', ('Error', 'Missing Required Argument'))
+            await self.send_message(ctx, 'red', None, ('Error', 'Missing Required Argument'))
         elif isinstance(error, commands.CommandNotFound):
-            await self.send_message(ctx, 'red', ('Error', 'Invalid Command'))
+            await self.send_message(ctx, 'red', None, ('Error', 'Invalid Command'))
+        else:
+            print(error)
     
     
     async def isInVoice(self, ctx):
         if ctx.author.voice is None:
-            await self.send_message(ctx, 'red', ('Error', 'You must be in a voice channel to run this command'))
+            await self.send_message(ctx, 'red', None, ('Error', 'You must be in a voice channel to run this command'))
             return False
         else:
             return True
