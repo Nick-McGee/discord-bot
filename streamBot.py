@@ -238,7 +238,7 @@ class streamBot(commands.Cog):
         await self.send_message(ctx, 'green', None, 
         ('Play', 'Plays a YouTube audio file. Needs a search query or YouTube URL\nExample:\n!play big iron\n!play https://www.youtube.com/watch?v=dQw4w9WgXcQ'),
         ('Playlist', 'Plays a YouTube playlist. Needs a YouTube playlist URL\nExample:\n!playlist https://www.youtube.com/playlist?list=PLlW4ryhNwVgBfFH8C_cUIjauhQUnwYy-z'),
-        ('Queue', 'Displays how many songs in the queue, total time of queue, and up next songs. By default up next is max 5, by can be passed in a number to show more\nExample:\n!queue\n!queue 10'),
+        ('Queue', 'Displays how many songs are in the queue, the total time of queue, and the up next songs. By default up next shows a maximum of 5 songs, but it can be passed in a number to show more\nExample:\n!queue\n!queue 10'),
         ('Now', 'Displays the currently playing song, and how much time it has left\nExample:\n!now'),
         ('Skip', 'Skips the currently playing song, and will play the next song in the queue\nExample:\n!skip'),
         ('Clear', 'Clears the queue of songs and stops the currently playing song\nExample:\n!clear'))
