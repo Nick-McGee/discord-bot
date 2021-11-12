@@ -2,3 +2,4 @@
 music/
 __pycache__/
 config.py
+discord.log
