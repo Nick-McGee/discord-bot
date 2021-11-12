@@ -166,25 +166,24 @@ class streamBot(commands.Cog):
             await self.playAudio(song[1], song[2], song[3], song[4], song[5])
     
 
-    @tasks.loop(seconds=5)
+    @tasks.loop(seconds=30)
     async def bot_timeout(self):
         '''
         Disconnect bot from voice chat if it hasn't played audio
-        for a certain amount of time.
+        for a certain amount of time. (currently 2mins 30 secs)
         '''
-        pass
-        # if not self.voice or not self.voice.is_connected():
-        #     return
+        if not self.voice or not self.voice.is_connected():
+            return
 
-        # if self.voice.is_playing():
-        #     self.voice_timeout = 0
-        # else:
-        #     self.voice_timeout += 1
+        if self.voice.is_playing():
+            self.voice_timeout = 0
+        else:
+            self.voice_timeout += 1
         
-        # if self.voice_timeout >= 6:
-        #     print('Voice disconnect')
-        #     await self.voice.disconnect()
-        #     self.voice = None
+        if self.voice_timeout >= 5:
+            print('Voice disconnect')
+            await self.voice.disconnect()
+            self.voice = None
         
 
 
@@ -299,7 +298,7 @@ class streamBot(commands.Cog):
             await self.send_message(ctx, 'green', None, False, ('Clearing', 'Clearing queue of songs'))
             self.voice.stop()
             self.clearing = True
-            await asyncio.sleep(2)
+            await asyncio.sleep(4)
             self.clearing = False
             self.songQueue = PriorityQueue()
 
