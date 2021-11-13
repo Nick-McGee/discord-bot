@@ -29,6 +29,7 @@ class streamBot(commands.Cog):
     def __init__(self, client):
         self.client = client
         self.voice = None
+        self.voiceTimeout = 0
         self.queuePosition = 0
         self.songQueue = PriorityQueue()
         self.isPlaying = False
@@ -86,18 +87,9 @@ class streamBot(commands.Cog):
             self.requestedBy = None
             self.songLength = 0
 
-        # Works, but can be spammy if bot disconnect.
         await self.connectToVoice(ctx)
-        timeout = 0
-        while timeout < 5:
-            try:
-                self.voice.play(FFmpegPCMAudio(audio, **FFMPEG_OPTS), after=update)
-            except:
-                await self.connectToVoice(ctx)
-                await asyncio.sleep(3)
-                timeout += 1
-            else:
-                timeout = 5
+        self.voice.play(FFmpegPCMAudio(audio, **FFMPEG_OPTS), after=update)
+
 
 
     async def connectToVoice(self, ctx):
@@ -176,11 +168,11 @@ class streamBot(commands.Cog):
             return
 
         if self.voice.is_playing():
-            self.voice_timeout = 0
+            self.voiceTimeout = 0
         else:
-            self.voice_timeout += 1
+            self.voiceTimeout += 1
         
-        if self.voice_timeout >= 5:
+        if self.voiceTimeout >= 5:
             print('Voice disconnect')
             await self.voice.disconnect()
             self.voice = None
