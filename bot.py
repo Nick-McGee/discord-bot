@@ -79,7 +79,7 @@ class streamBot(commands.Cog):
         self.songLength = duration + time.mktime(time.localtime())
 
         print('Playing:', title)
-        await self.send_message(ctx, 'green', thumbnail, True, ('Now Playing', f'{title}'), ('Length', time.strftime('%H:%M:%S', time.gmtime(duration))))
+        await self.send_message(ctx, 'green', thumbnail, self.requestedBy, ('Now Playing', f'{title}'), ('Length', time.strftime('%H:%M:%S', time.gmtime(duration))))
 
         def update(e: None):
             self.isPlaying = False
@@ -109,7 +109,7 @@ class streamBot(commands.Cog):
         Checks if the user sending a command is in a voice channel.
         '''
         if ctx.author.voice is None:
-            await self.send_message(ctx, 'red', None, False, ('Error', 'You must be in a voice channel to run this command'))
+            await self.send_message(ctx, 'red', None, None, ('Error', 'You must be in a voice channel to run this command'))
             return False
         else:
             return True
@@ -139,8 +139,8 @@ class streamBot(commands.Cog):
         if img:
             embed.set_thumbnail(url=img)
         
-        if footer == True:
-            embed.set_footer(text=f'Requested by {self.requestedBy}')
+        if footer:
+            embed.set_footer(text=f'Requested by {footer}')
 
         await ctx.send(embed=embed)
 
@@ -193,7 +193,7 @@ class streamBot(commands.Cog):
         audio, title, duration, thumbnail = await self.findAudio(arg)
         self.queuePosition += 1
         self.songQueue.put((self.queuePosition, ctx, audio, title, duration, thumbnail))
-        await self.send_message(ctx, 'green', thumbnail, True, ('Queued Song', f'{title}'), ('Length', time.strftime('%H:%M:%S', time.gmtime(duration))))
+        await self.send_message(ctx, 'green', thumbnail, ctx.author.display_name, ('Queued Song', f'{title}'), ('Length', time.strftime('%H:%M:%S', time.gmtime(duration))))
 
 
     @commands.command()
@@ -204,7 +204,7 @@ class streamBot(commands.Cog):
         if not await self.isInVoice(ctx):
             return
         
-        await self.send_message(ctx, 'green', None, False, ('Downloading Playlist', 'It may take a moment to fill the queue'))
+        await self.send_message(ctx, 'green', None, None, ('Downloading Playlist', 'It may take a moment to fill the queue'))
 
         playlist_urls = Playlist(arg)
         internalQueuePosition = self.queuePosition
@@ -229,10 +229,10 @@ class streamBot(commands.Cog):
             return
         
         if not self.nowPlaying:
-            await self.send_message(ctx, 'orange', None, False, ('There isn\'t a song currently playing', 'Use !play or !playlist to play a song'))
+            await self.send_message(ctx, 'orange', None, None, ('There isn\'t a song currently playing', 'Use !play or !playlist to play a song'))
         else:
             timeLeft = self.songLength - time.mktime(time.localtime())
-            await self.send_message(ctx, 'green', self.songThumbnail, True, ('Now Playing', self.nowPlaying), ('Time left', time.strftime('%H:%M:%S', time.gmtime(timeLeft))))
+            await self.send_message(ctx, 'green', self.songThumbnail, self.requestedBy, ('Now Playing', self.nowPlaying), ('Time left', time.strftime('%H:%M:%S', time.gmtime(timeLeft))))
 
 
     @commands.command()
@@ -264,13 +264,13 @@ class streamBot(commands.Cog):
         songNames = '\n'.join(songNames)
 
         if isOverCharCount:
-            await self.send_message(ctx, 'orange', None, False, ('Too many requests', 'Too many songs requested in queue. Songs in queue will be limited'))
+            await self.send_message(ctx, 'orange', None, None, ('Too many requests', 'Too many songs requested in queue. Songs in queue will be limited'))
         if self.songQueue.empty():
-            await self.send_message(ctx, 'orange', None, False, ('The queue is empty', 'Use !play or !playlist to play a song'))
+            await self.send_message(ctx, 'orange', None, None, ('The queue is empty', 'Use !play or !playlist to play a song'))
         elif self.songQueue.qsize() == 1:
-            await self.send_message(ctx, 'green', None, False, ('Queue', f'There is currently 1 song in the queue'), ('Next song', songNames), ('Total time', time.strftime('%H:%M:%S', time.gmtime(totalTime))))
+            await self.send_message(ctx, 'green', None, None, ('Queue', f'There is currently 1 song in the queue'), ('Next song', songNames), ('Total time', time.strftime('%H:%M:%S', time.gmtime(totalTime))))
         else:
-            await self.send_message(ctx, 'green', None, False, ('Queue', f'There are currently {self.songQueue.qsize()} songs in the queue'), (f'Next {upNextCount} songs', songNames), ('Total time', time.strftime('%H:%M:%S', time.gmtime(totalTime))))
+            await self.send_message(ctx, 'green', None, None, ('Queue', f'There are currently {self.songQueue.qsize()} songs in the queue'), (f'Next {upNextCount} songs', songNames), ('Total time', time.strftime('%H:%M:%S', time.gmtime(totalTime))))
 
 
     @commands.command()
@@ -282,9 +282,9 @@ class streamBot(commands.Cog):
             return
 
         if self.voice is None or not self.voice.is_playing():
-            await self.send_message(ctx, 'orange', None, False, ('Cannot skip song', 'A song is not playing'))
+            await self.send_message(ctx, 'orange', None, None, ('Cannot skip song', 'A song is not playing'))
         else:
-            await self.send_message(ctx, 'green', None, False, ('Skipping', f'Skipping {self.nowPlaying}'))
+            await self.send_message(ctx, 'green', None, None, ('Skipping', f'Skipping {self.nowPlaying}'))
             self.voice.stop()
 
 
@@ -301,10 +301,10 @@ class streamBot(commands.Cog):
             return
 
         if self.voice is None or (self.songQueue.empty() and not self.isPlaying):
-            await self.send_message(ctx, 'orange', None, False, ('Cannot clear queue', 'There are no songs in the queue'))
+            await self.send_message(ctx, 'orange', None, None, ('Cannot clear queue', 'There are no songs in the queue'))
         else:
             # This has potential to not work
-            await self.send_message(ctx, 'green', None, False, ('Clearing', 'Clearing queue of songs'))
+            await self.send_message(ctx, 'green', None, None, ('Clearing', 'Clearing queue of songs'))
             self.voice.stop()
             self.clearing = True
             await asyncio.sleep(4)
@@ -317,7 +317,7 @@ class streamBot(commands.Cog):
         '''
         For internal use. Displays CPU and memory usage
         '''
-        await self.send_message(ctx, 'green', None, False, ('Current memory usage', '{:.2f} MB'.format(psutil.Process(os.getpid()).memory_info().rss / 1024 ** 2)), ('Current CPU usage', '{:.2f}%'.format(psutil.cpu_percent())))
+        await self.send_message(ctx, 'green', None, None, ('Current memory usage', '{:.2f} MB'.format(psutil.Process(os.getpid()).memory_info().rss / 1024 ** 2)), ('Current CPU usage', '{:.2f}%'.format(psutil.cpu_percent())))
 
 
     @commands.command()
@@ -325,7 +325,7 @@ class streamBot(commands.Cog):
         '''
         Help command for commands users can use with descriptions.
         '''
-        await self.send_message(ctx, 'green', None, False,
+        await self.send_message(ctx, 'green', None, None,
         ('Play', 'Plays a YouTube audio file. Needs a search query or YouTube URL\nExample:\n!play big iron\n!play https://www.youtube.com/watch?v=dQw4w9WgXcQ'),
         ('Playlist', 'Plays a YouTube playlist. Needs a YouTube playlist URL\nExample:\n!playlist https://www.youtube.com/playlist?list=PLlW4ryhNwVgBfFH8C_cUIjauhQUnwYy-z'),
         ('Queue', 'Displays how many songs are in the queue, the total time of queue, and the up next songs. By default up next shows a maximum of 5 songs, but it can be passed in a number to show more\nExample:\n!queue\n!queue 10'),
@@ -387,7 +387,7 @@ class streamBot(commands.Cog):
         Send message when an invalid command is used.
         '''
         if isinstance(error, commands.CommandNotFound):
-            await self.send_message(ctx, 'red', None, False, ('Error', 'Invalid Command'))
+            await self.send_message(ctx, 'red', None, None, ('Error', 'Invalid Command'))
         else:
             print(error)
     
@@ -398,7 +398,7 @@ class streamBot(commands.Cog):
         Send message when user doesn't give a search query in play command
         '''
         if isinstance(error, commands.MissingRequiredArgument):
-            await self.send_message(ctx, 'red', None, False, ('Error', 'You must give a search query or YouTube URL to play a video\n\nExample:\n!play big iron'))
+            await self.send_message(ctx, 'red', None, None, ('Error', 'You must give a search query or YouTube URL to play a video\n\nExample:\n!play big iron'))
         else:
             print(error)
     
@@ -409,7 +409,7 @@ class streamBot(commands.Cog):
         Send message when user doesn't give a search query in playlist command
         '''
         if isinstance(error, commands.MissingRequiredArgument):
-            await self.send_message(ctx, 'red', None, False, ('Error', 'You must give a YouTube Playlist URL to play a video\n\nExample:\n!playlist https://www.youtube.com/playlist?list=PLlW4ryhNwVgBfFH8C_cUIjauhQUnwYy-z'))
+            await self.send_message(ctx, 'red', None, None, ('Error', 'You must give a YouTube Playlist URL to play a video\n\nExample:\n!playlist https://www.youtube.com/playlist?list=PLlW4ryhNwVgBfFH8C_cUIjauhQUnwYy-z'))
         else:
             print(error)
     
