@@ -177,6 +177,7 @@ class streamBot(commands.Cog):
             print('Voice disconnect')
             await self.voice.disconnect()
             self.voice = None
+            self.queuePosition = 0
         
 
 
