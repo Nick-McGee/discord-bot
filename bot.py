@@ -177,6 +177,7 @@ class streamBot(commands.Cog):
             print('Voice disconnect')
             await self.voice.disconnect()
             self.voice = None
+            self.queuePosition = 0
         
 
 
@@ -192,6 +193,7 @@ class streamBot(commands.Cog):
         audio, title, duration, thumbnail = await self.findAudio(arg)
         self.queuePosition += 1
         self.songQueue.put((self.queuePosition, ctx, audio, title, duration, thumbnail))
+        await self.send_message(ctx, 'green', thumbnail, True, ('Queued Song', f'{title}'), ('Length', time.strftime('%H:%M:%S', time.gmtime(duration))))
 
 
     @commands.command()
