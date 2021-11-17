@@ -69,7 +69,7 @@ Plays a YouTube playlist. Needs a YouTube playlist URL.
     !playlist https://www.youtube.com/playlist?list=PLlW4ryhNwVgBfFH8C_cUIjauhQUnwYy-z
     ```
     <p align="center">
-        <img src="screenshots/playlist.png" width="400">
+        <img src="screenshots/playlist.png" width="500">
     </p>
 
 #### Queue 
@@ -83,7 +83,7 @@ Displays how many songs are in the queue, the total time of queue, and the up ne
     !queue 10
     ```
     <p align="center">
-        <img src="screenshots/queue.png" width="350">
+        <img src="screenshots/queue.png" width="400">
     </p>
 
 #### Now
@@ -104,7 +104,7 @@ Skips the currently playing song, and will play the next song in the queue.
     !skip
     ```
     <p align="center">
-        <img src="screenshots/skip.png" width="350">
+        <img src="screenshots/skip.png" width="400">
     </p>
 
 #### Clear
