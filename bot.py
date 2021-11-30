@@ -57,7 +57,7 @@ class streamBot(commands.Cog):
         '''
         Stream audio from youtube either by search query or by URL.
         '''
-        with yt({'format': 'bestaudio', 'age_limit': '21', 'noplaylist': 'True'}) as ytdl:
+        with yt({'format': 'bestaudio', 'age_limit': '21', 'noplaylist': 'True', 'cookiefile': 'youtube.com_cookies.txt'}) as ytdl:
             try:
                 requests.get(search)
             except:
