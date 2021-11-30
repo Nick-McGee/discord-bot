@@ -191,9 +191,12 @@ class streamBot(commands.Cog):
             return
 
         audio, title, duration, thumbnail = await self.findAudio(arg)
+
+        if (self.songQueue.qsize() > 0 or self.nowPlaying):
+            await self.send_message(ctx, 'green', thumbnail, ctx.author.display_name, ('Queued Song', f'{title}'), ('Length', time.strftime('%H:%M:%S', time.gmtime(duration))))
+
         self.queuePosition += 1
         self.songQueue.put((self.queuePosition, ctx, audio, title, duration, thumbnail))
-        await self.send_message(ctx, 'green', thumbnail, ctx.author.display_name, ('Queued Song', f'{title}'), ('Length', time.strftime('%H:%M:%S', time.gmtime(duration))))
 
 
     @commands.command()
