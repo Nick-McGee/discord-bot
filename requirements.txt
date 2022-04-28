@@ -1,3 +1,4 @@
+requests
 py-cord[voice] --pre
 youtube-dl
 pytube
