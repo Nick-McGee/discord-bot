@@ -1,6 +1,5 @@
-.vscode/
-music/
+.venv
+.pytest_cache
 __pycache__/
-config.py
-discord.log
+auth.py
 youtube.com_cookies.txt
