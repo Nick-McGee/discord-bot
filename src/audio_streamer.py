@@ -6,7 +6,7 @@ from asyncio import sleep, get_event_loop
 
 from discord import Bot, FFmpegPCMAudio, PCMVolumeTransformer, ApplicationContext, Embed, Colour
 from discord.ext import commands, tasks
-from discord.commands import slash_command
+from discord.commands import slash_command, Option
 from discord.errors import ClientException
 from discord.opus import OpusNotLoaded
 from pytube import Playlist
@@ -32,7 +32,7 @@ class AudioStreamer(commands.Cog):
         self.auto_refresh_ui.start()
 
     @slash_command(name='play', description='Queue YouTube audio files via a search query or URL', guild_ids=[GUILD_ID])
-    async def play_command(self, ctx: ApplicationContext, query: str) -> None:
+    async def play_command(self, ctx: ApplicationContext, query: Option(str, 'Search or URL')) -> None:
         logging.info('Play command invoked')
         await ctx.defer()
         audio_title = await self.queue_audio(ctx=ctx, query=query)
@@ -48,7 +48,7 @@ class AudioStreamer(commands.Cog):
                               delete_after=DELETE_TIMER)
 
     @slash_command(name='play_next', description='Queue up next YouTube audio files via a search query or URL', guild_ids=[GUILD_ID])
-    async def play_next_command(self, ctx: ApplicationContext, query: str) -> None:
+    async def play_next_command(self, ctx: ApplicationContext, query: Option(str, 'Search or URL')) -> None:
         logging.info('Play next command invoked')
         await ctx.defer()
         audio_title = await self.queue_audio(ctx=ctx, query=query, add_to_start=True)
@@ -64,7 +64,7 @@ class AudioStreamer(commands.Cog):
                               delete_after=DELETE_TIMER)
 
     @slash_command(name='playlist', description='Queue a series of audio files from a YouTube Playlist URL', guild_ids=[GUILD_ID])
-    async def playlist_command(self, ctx: ApplicationContext, url: str) -> None:
+    async def playlist_command(self, ctx: ApplicationContext, url: Option(str, 'A playlist URL')) -> None:
         logging.info('Playlist command invoked')
         await ctx.defer()
         logging.info('Queuing %s', url)
