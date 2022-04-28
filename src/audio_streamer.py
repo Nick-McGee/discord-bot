@@ -170,7 +170,6 @@ class AudioStreamer(commands.Cog):
     @slash_command(name='reset', description='Reset the voice client, queue, and user interface', guild_ids=[GUILD_ID])
     async def reset_command(self, ctx: ApplicationContext) -> None:
         logging.info('Reset command invoked')
-        await ctx.defer()
 
         await self.restart_queue_and_voice()
         await self.user_interface.delete_ui(bot=self.bot, guild=ctx.guild)
@@ -181,7 +180,8 @@ class AudioStreamer(commands.Cog):
         except RuntimeError as runtime_error:
             logging.error('Queue lock is already released, %s', runtime_error)
 
-        await ctx.respond(embed=Embed(title='Cleared Queue',
+        await ctx.respond(embed=Embed(title='Reset Bot',
+                                      description=f'**{self.bot.user.display_name}** has been reset',
                                       color=Colour.green()),
                           delete_after=DELETE_TIMER)
 
@@ -193,7 +193,7 @@ class AudioStreamer(commands.Cog):
             await self.join_voice(ctx=ctx)
             await self.user_interface.new_ui(ctx=ctx)
             await ctx.respond(embed=Embed(title='Reconnected',
-                                          description=f'{self.bot.user.display_name} connected to voice channel {ctx.author.voice.channel} and text channel {ctx.channel}',
+                                          description=f'**{self.bot.user.display_name}** connected to voice channel **{ctx.author.voice.channel}** and text channel **{ctx.channel}**',
                                           color=Colour.green()),
                               delete_after=DELETE_TIMER)
             logging.info('Bot reconnected')
