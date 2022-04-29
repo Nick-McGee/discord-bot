@@ -28,13 +28,16 @@ class AudioStreamer(commands.Cog):
         self.currently_playing_client = None
         self.user_interface = UserInterface(change_audio_function = self.change_audio,
                                             queue = self.queue)
-        self.check_queue.start()
-        self.auto_refresh_ui.start()
+        self.timeout_check = False
+        self.timeout.start()
 
     @slash_command(name='play', description='Queue YouTube audio files via a search query or URL', guild_ids=[GUILD_ID])
     async def play_command(self, ctx: ApplicationContext, query: Option(str, 'Search or URL')) -> None:
         logging.info('Play command invoked')
         await ctx.defer()
+
+        self.start_tasks()
+
         audio_title = await self.queue_audio(ctx=ctx, query=query)
         if audio_title:
             await ctx.respond(embed=Embed(title='Queued',
@@ -51,6 +54,9 @@ class AudioStreamer(commands.Cog):
     async def play_next_command(self, ctx: ApplicationContext, query: Option(str, 'Search or URL')) -> None:
         logging.info('Play next command invoked')
         await ctx.defer()
+
+        self.start_tasks()
+
         audio_title = await self.queue_audio(ctx=ctx, query=query, add_to_start=True)
         if audio_title:
             await ctx.respond(embed=Embed(title='Queued Next',
@@ -67,9 +73,10 @@ class AudioStreamer(commands.Cog):
     async def playlist_command(self, ctx: ApplicationContext, url: Option(str, 'A playlist URL')) -> None:
         logging.info('Playlist command invoked')
         await ctx.defer()
-        logging.info('Queuing %s', url)
-        playlist = get_playlist(playlist_url=url)
 
+        self.start_tasks()
+
+        playlist = get_playlist(playlist_url=url)
         try:
             if len(playlist) == 0:
                 await ctx.respond(embed=Embed(title='Error',
@@ -96,6 +103,8 @@ class AudioStreamer(commands.Cog):
 
         while not self.queue_lock.acquire(blocking=False):
             await sleep(0.1)
+
+        self.start_tasks()
 
         try:
             self.currently_playing_client.stop()
@@ -152,7 +161,7 @@ class AudioStreamer(commands.Cog):
             except AttributeError as attribute_error:
                 logging.error('No voice client connected to clear: %s', attribute_error)
 
-            await ctx.respond(embed=Embed(title='Remove from queue',
+            await ctx.respond(embed=Embed(title='Remove from Queue',
                                           description=f'Removed {song_title}',
                                           color=Colour.green()),
                               delete_after=DELETE_TIMER)
@@ -172,9 +181,10 @@ class AudioStreamer(commands.Cog):
         logging.info('Reset command invoked')
         await ctx.defer()
 
-        await self.restart_queue_and_voice()
+        await self.reset_voice()
+        await self.reset_queue()
         await self.user_interface.delete_ui(bot=self.bot, guild=ctx.guild)
-        self.restart_tasks()
+        self.stop_tasks()
 
         try:
             self.queue_lock.release()
@@ -228,8 +238,31 @@ class AudioStreamer(commands.Cog):
             await self.change_audio(direction='next')
 
     @tasks.loop(seconds=3)
-    async def auto_refresh_ui(self) -> None:
+    async def auto_refresh_ui_fast(self) -> None:
+        self.auto_refresh_ui_slow.stop()
         await self.user_interface.refresh_ui()
+
+    @tasks.loop(minutes=1)
+    async def auto_refresh_ui_slow(self) -> None:
+        self.auto_refresh_ui_fast.stop()
+        await self.user_interface.refresh_ui()
+
+    @tasks.loop(minutes=15)
+    async def timeout(self) -> None:
+        if self.currently_playing_client is None or not self.currently_playing_client.is_playing():
+            if self.timeout_check is True:
+                self.stop_tasks()
+                await self.reset_voice()
+                if not self.auto_refresh_ui_slow.is_running():
+                    try:
+                        self.auto_refresh_ui_slow.start()
+                    except RuntimeError as runtime_error:
+                        logging.warning('Auto refresh slow is already running: %s', runtime_error)
+            else:
+                self.timeout_check = True
+        else:
+            self.auto_refresh_ui_slow.stop()
+            self.timeout_check = False
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -290,6 +323,8 @@ class AudioStreamer(commands.Cog):
         while not self.queue_lock.acquire(blocking=False):
             await sleep(0.1)
 
+        self.start_tasks()
+
         if direction == 'prev':
             logging.info('Getting previous audio')
             await self.queue.get_previous_audio()
@@ -325,15 +360,35 @@ class AudioStreamer(commands.Cog):
             logging.info('Joined voice channel: %s', channel)
             self.currently_playing_client = ctx.voice_client
 
-    async def restart_queue_and_voice(self) -> None:
+    async def reset_voice(self) -> None:
         try:
             await self.currently_playing_client.disconnect(force=True)
         except AttributeError as attribute_error:
             logging.error('No voice client connected to clear: %s', attribute_error)
         self.currently_playing_client = None
+
+    async def reset_queue(self) -> None:
         self.cancel_queue_playlist = True
         self.queue.reset_queue()
 
+    def start_tasks(self) -> None:
+        if not self.check_queue.is_running():
+            try:
+                self.check_queue.start()
+            except RuntimeError as runtime_error:
+                logging.warning('Auto refresh slow is already running: %s', runtime_error)
+
+        if not self.auto_refresh_ui_fast.is_running():
+            try:
+                self.auto_refresh_ui_fast.start()
+            except RuntimeError as runtime_error:
+                logging.warning('Auto refresh slow is already running: %s', runtime_error)
+
+    def stop_tasks(self) -> None:
+        self.check_queue.stop()
+        self.auto_refresh_ui_fast.stop()
+        self.auto_refresh_ui_slow.stop()
+
     def restart_tasks(self) -> None:
         self.check_queue.restart()
-        self.auto_refresh_ui.restart()
+        self.auto_refresh_ui_fast.restart()
