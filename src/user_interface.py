@@ -56,7 +56,7 @@ class UserInterface:
         try:
             message_list = []
             for text_channels in guild.text_channels:
-                message_list.append(await text_channels.history(limit=123).flatten())
+                message_list.append(await text_channels.history(limit=100).flatten())
 
             for channel in message_list:
                 for message in channel:

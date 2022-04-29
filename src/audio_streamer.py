@@ -170,6 +170,7 @@ class AudioStreamer(commands.Cog):
     @slash_command(name='reset', description='Reset the voice client, queue, and user interface', guild_ids=[GUILD_ID])
     async def reset_command(self, ctx: ApplicationContext) -> None:
         logging.info('Reset command invoked')
+        await ctx.defer()
 
         await self.restart_queue_and_voice()
         await self.user_interface.delete_ui(bot=self.bot, guild=ctx.guild)
