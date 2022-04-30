@@ -4,14 +4,16 @@ from collections import deque
 from typing import Union
 from dataclasses import dataclass, field
 
-from discord import ApplicationContext
+from discord import TextChannel, Member, User, VoiceChannel
 
 import config.logger
 
 
 @dataclass
 class Audio:
-    ctx: ApplicationContext
+    author: Union[Member, User]
+    voice_channel: VoiceChannel
+    text_channel: TextChannel
     audio_url: str
     webpage_url: str
     title: str
@@ -19,13 +21,6 @@ class Audio:
     thumbnail: str
     start_time: datetime = field(init=False)
     end_time: datetime = field(init=False)
-    channel: datetime = field(init=False)
-
-    def __post_init__(self):
-        try:
-            self.channel = self.ctx.author.voice.channel
-        except AttributeError as attribute_error:
-            logging.error('No channel found: %s', attribute_error)
 
     def __str__(self) -> str:
         return self.title

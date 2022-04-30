@@ -2,7 +2,7 @@ import logging
 from typing import Union
 import requests
 
-from discord import ApplicationContext
+from discord import Member, User, VoiceChannel, TextChannel
 from youtube_dl import YoutubeDL as yt
 from youtube_dl import DownloadError
 from pytube import Playlist
@@ -11,10 +11,12 @@ from audio import Audio
 import config.logger
 
 
-def get_audio(query: str, ctx: ApplicationContext) -> Union[Audio, None]:
+def get_audio(query: str, author: Union[User, Member], voice_channel: VoiceChannel, text_channel: TextChannel) -> Union[Audio, None]:
     entry = _get_entry_from_youtube(query=query)
     if entry:
-        audio = Audio(ctx=ctx,
+        audio = Audio(author=author,
+                      voice_channel=voice_channel,
+                      text_channel=text_channel,
                       audio_url=entry['url'],
                       webpage_url=entry['webpage_url'],
                       title=entry['title'],

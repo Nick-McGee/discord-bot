@@ -4,7 +4,7 @@ from typing import Callable, Union
 from asyncio import sleep
 from threading import Lock
 
-from discord import Bot, ApplicationContext, Guild, Interaction, Embed, ButtonStyle
+from discord import Bot, TextChannel, Guild, Interaction, Embed, ButtonStyle
 from discord.ui import Button, View
 from discord.errors import NotFound
 
@@ -21,7 +21,7 @@ class UserInterface:
         self.current_ui = None
         self.current_ui_lock = Lock()
 
-    async def new_ui(self, ctx: ApplicationContext) -> None:
+    async def new_ui(self, text_channel: TextChannel) -> None:
         logging.info('Creating new UI')
         view = await self.get_view()
         embed = await self.get_embed()
@@ -32,7 +32,7 @@ class UserInterface:
         try:
             if self.current_ui:
                 await self.current_ui.delete()
-            self.current_ui = await ctx.send(embed=embed, view=view)
+            self.current_ui = await text_channel.send(embed=embed, view=view)
         except NotFound as not_found:
             logging.error('UI not found: %s', not_found)
         finally:
@@ -84,9 +84,9 @@ class UserInterface:
                 logging.error(attribute_error)
 
             embed.set_image(url=current_audio.thumbnail)
-            if current_audio.ctx.author is not None:
-                embed.set_footer(text=f'Requested by {current_audio.ctx.author.display_name}',
-                                icon_url=current_audio.ctx.author.display_avatar)
+            if current_audio.author is not None:
+                embed.set_footer(text=f'Requested by {current_audio.author.display_name}',
+                                icon_url=current_audio.author.display_avatar)
 
         next_audio_string = await self._get_audio_queue_strings(queue_type='next', amount=5)
         if next_audio_string:
