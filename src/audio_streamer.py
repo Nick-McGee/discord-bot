@@ -13,7 +13,7 @@ from pytube import Playlist
 
 from audio import Audio, AudioQueue
 from voice import Voice
-from user_interface import UserInterface
+from audio_streamer_user_interface import StreamerUserInterface
 from youtube_client import get_audio, get_playlist
 import config.logger
 from config.settings import FFMPEG_OPTS, DELETE_TIMER
@@ -25,11 +25,10 @@ class AudioStreamer(commands.Cog):
         self.bot = bot
         self.queue = AudioQueue()
         self.voice = Voice(bot=bot)
-        self.user_interface = UserInterface(change_audio_function = self.change_audio,
-                                            queue = self.queue)
+        self.user_interface = StreamerUserInterface(change_audio_function = self.change_audio,
+                                                    queue = self.queue)
         self.lock = Lock()
         self.cancel_queue_playlist = False
-        self.timeout_check = False
 
     @slash_command(name='play', description='Queue YouTube audio files via a search query or URL', guild_ids=[GUILD_ID])
     async def play_command(self, ctx: ApplicationContext, query: Option(str, 'Search or URL')) -> None:
@@ -89,11 +88,10 @@ class AudioStreamer(commands.Cog):
     @slash_command(name='restart_queue', description='Start playing from the beginning of the previous queue', guild_ids=[GUILD_ID])
     async def restart_queue(self, ctx: ApplicationContext) -> None:
         logging.info('Restart queue command invoked')
-        await self.acquire_lock()
-        await self.voice.stop_voice()
-        self.start_queue_ui_tasks()
+
         await self.queue.restart_queue()
-        await self.release_lock()
+        await self.voice.stop_voice()
+        self.restart_tasks()
 
         await ctx.respond(embed=Embed(title='Restarted Queue', color=Colour.green()),
                           delete_after=DELETE_TIMER)
@@ -116,7 +114,6 @@ class AudioStreamer(commands.Cog):
     @slash_command(name='remove', description='Skips and removes the currently playing song from the queue', guild_ids=[GUILD_ID])
     async def remove_command(self, ctx: ApplicationContext) -> None:
         logging.info('Remove from queue command invoked')
-        await self.acquire_lock()
 
         if self.queue.get_current_audio():
             song_title = self.queue.get_current_audio().title
@@ -128,15 +125,13 @@ class AudioStreamer(commands.Cog):
             await ctx.respond(embed=Embed(title='Unable to Remove from Queue', description='Unable to find current audio to remove', color=Colour.green()),
                               delete_after=DELETE_TIMER)
 
-        await self.release_lock()
-
     @slash_command(name='reset', description='Reset the voice client, queue, and user interface', guild_ids=[GUILD_ID])
     async def reset_command(self, ctx: ApplicationContext) -> None:
         logging.info('Reset command invoked')
         await self.voice.reset_voice()
         await self.reset_queue()
         await self.user_interface.delete_ui(bot=self.bot, guild=ctx.guild)
-        self.stop_tasks()
+        self.restart_tasks()
         await self.release_lock()
 
         await ctx.respond(embed=Embed(title='Reset Bot',
@@ -162,21 +157,27 @@ class AudioStreamer(commands.Cog):
 
     @tasks.loop(seconds=0.5)
     async def check_queue(self):
-        if not self.voice.is_playing() and not self.lock.locked() and self.queue.get_queue_length() > 0:
-            await self.change_audio(direction='next')
+        logging.info('Checking queue')
+        if not self.voice.is_playing() and not self.lock.locked():
+            if self.queue.get_queue_length() > 0:
+                await self.change_audio(direction='next')
+            elif self.queue.get_queue_length() == 0 and self.queue.get_current_audio() is not None:
+                await self.change_audio(direction='next')
 
-    @tasks.loop(minutes=15)
+    @tasks.loop(seconds=10)
     async def timeout(self) -> None:
         if not self.voice.is_playing():
-            if self.timeout_check is True:
+            tries = 10
+            while tries > 0:
+                await sleep(1)
+                if self.voice.is_playing():
+                    return
+                tries -= 1
+
+            if not self.voice.is_playing():
                 self.stop_tasks()
-                self.user_interface.start_auto_refresh_ui_slow()
+                self.user_interface.slow_auto_refresh()
                 await self.voice.reset_voice()
-            else:
-                self.timeout_check = True
-        else:
-            self.user_interface.auto_refresh_ui_slow.stop()
-            self.timeout_check = False
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -254,8 +255,7 @@ class AudioStreamer(commands.Cog):
     async def stream(self, audio: Audio) -> None:
         try:
             audio_source = PCMVolumeTransformer(FFmpegPCMAudio(source=audio.audio_url, **FFMPEG_OPTS), volume=0.1)
-            loop = get_event_loop()
-            await loop.run_in_executor(None, self.voice.client.play, audio_source)
+            await get_event_loop().run_in_executor(None, self.voice.client.play, audio_source)
         except (TypeError, AttributeError, ClientException, OpusNotLoaded) as exception:
             logging.error('Error playing audio %s: %s', audio.title, exception)
             await self.voice.disconnect_voice()
@@ -284,7 +284,7 @@ class AudioStreamer(commands.Cog):
 
     def start_queue_ui_tasks(self) -> None:
         self.start_check_queue()
-        self.user_interface.start_auto_refresh_ui_fast()
+        self.user_interface.start_auto_refresh()
 
     def start_check_queue(self) -> None:
         if not self.check_queue.is_running():
@@ -295,11 +295,10 @@ class AudioStreamer(commands.Cog):
 
     def stop_tasks(self) -> None:
         self.check_queue.stop()
-        self.user_interface.stop_tasks()
 
     def restart_tasks(self) -> None:
         self.check_queue.restart()
-        self.user_interface.auto_refresh_ui_fast.restart()
+        self.user_interface.restart_auto_refresh()
 
     async def acquire_lock(self) -> None:
         while not self.lock.acquire(blocking=False):

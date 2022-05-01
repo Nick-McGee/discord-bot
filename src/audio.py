@@ -55,7 +55,7 @@ class AudioQueue:
             if self.current_audio:
                 self._add_to_previous_queue(audio=self.current_audio)
             self.current_audio = None
-            logging.error('Unable to get next song, queue is empty')
+            logging.warning('Unable to get next song, queue is empty')
         return next_audio
 
     def _add_to_previous_queue(self, audio: Audio) -> None:
