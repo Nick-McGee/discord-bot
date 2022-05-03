@@ -144,23 +144,23 @@ class AudioStreamer(commands.Cog):
             await ctx.respond(embed=Embed(title='Unable to Connect', description=f'Error connecting **{self.bot.user.display_name}** to voice', color=red),
                               delete_after=DELETE_TIMER)
 
-    # @tasks.loop(seconds=10)
-    # async def timeout(self) -> None:
-    #     if not self.voice.is_playing():
-    #         tries = 10
-    #         while tries > 0:
-    #             await sleep(1)
-    #             if self.voice.is_playing():
-    #                 return
-    #             tries -= 1
+    @tasks.loop(seconds=10)
+    async def timeout(self) -> None:
+        if not self.voice.is_playing():
+            tries = 10
+            while tries > 0:
+                await sleep(1)
+                if self.voice.is_playing():
+                    return
+                tries -= 1
 
-    #         if not self.voice.is_playing():
-    #             self.user_interface.slow_auto_refresh()
-    #             await self.voice.reset_voice()
+            if not self.voice.is_playing():
+                self.user_interface.slow_auto_refresh()
+                await self.voice.reset_voice()
 
     @commands.Cog.listener()
     async def on_ready(self):
-        # self.timeout.start()
+        self.timeout.start()
         await self.bot.wait_until_ready()
         guild = self.bot.guilds[0]
         await self.user_interface.delete_ui(bot=self.bot, guild=guild)
@@ -175,18 +175,10 @@ class AudioStreamer(commands.Cog):
     @reset_command.before_invoke
     @reconnect_bot.before_invoke
     async def ensure_voice(self, ctx: ApplicationContext) -> None:
-        self.user_interface.start_auto_refresh()
         await ctx.defer()
         if ctx.author and ctx.author.voice is None:
             await ctx.respond(embed=Embed(title='Error', description='You are not connected to a voice channel', color=red),
                               delete_after=DELETE_TIMER)
-
-    @play_command.after_invoke
-    @play_next_command.after_invoke
-    @playlist_command.after_invoke
-    async def start_queue(self, ctx: ApplicationContext) -> None:
-        if not self.voice.is_playing():
-            self.change_audio()
 
     async def queue_audio(self,
                           query: str,

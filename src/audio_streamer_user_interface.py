@@ -22,11 +22,11 @@ class StreamerUserInterface(UserInterface):
         subscribe('no_audio', self.refresh_ui)
 
     async def new_ui(self, data: Union[Audio, TextChannel]) -> None:
+        self.start_auto_refresh()
         if isinstance(data, Audio):
             await super().new_ui(text_channel=data.text_channel)
         else:
             await super().new_ui(text_channel=data)
-        self.start_auto_refresh()
 
     async def get_embed(self) -> Embed:
         if self.queue.get_current_audio() is None:

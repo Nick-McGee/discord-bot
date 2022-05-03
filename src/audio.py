@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime, timedelta
 from collections import deque
-from typing import Callable, Union
+from typing import Union
 from asyncio import AbstractEventLoop
 from dataclasses import dataclass, field
 
@@ -108,6 +108,8 @@ class AudioQueue:
             if self._is_below_max_queue_size():
                 if direction == 'right':
                     self.queue.append(audio)
+                    if self.current_audio == None:
+                        self.get_next_audio()
                 elif direction == 'left':
                     self.queue.appendleft(audio)
                 else:
