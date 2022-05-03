@@ -1,10 +1,13 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from collections import deque
-from typing import Union
+from typing import Callable, Union
+from asyncio import AbstractEventLoop
 from dataclasses import dataclass, field
 
 from discord import TextChannel, Member, User, VoiceChannel
+
+from async_event_handler import post_event
 
 import config.logger
 
@@ -27,12 +30,29 @@ class Audio:
 
 
 class AudioQueue:
-    def __init__(self, max_queue_size: int = 10000, max_previous_queue_size: int = 100):
-        self.queue = deque()
-        self.previous_queue = deque()
-        self.current_audio = None
+    def __init__(self,
+                 event_loop = AbstractEventLoop,
+                 max_queue_size: int = 10000,
+                 max_previous_queue_size: int = 100):
+        self.event_loop = event_loop
         self.max_queue_size = max_queue_size
         self.max_previous_queue_size = max_previous_queue_size
+        self.queue = deque()
+        self.previous_queue = deque()
+        self._current_audio = None
+
+    @property
+    def current_audio(self) -> Union[Audio, None]:
+        return self._current_audio
+
+    @current_audio.setter
+    def current_audio(self, audio: Union[Audio, None]) -> None:
+        self._current_audio = audio
+        if self._current_audio:
+            self._current_audio.end_time = datetime.now() + timedelta(seconds=self._current_audio.length)
+            post_event(event_type='new_audio', loop=self.event_loop, data=self._current_audio)
+        else:
+            post_event(event_type='no_audio', loop=self.event_loop)
 
     async def append(self, audio: Audio) -> None:
         await self._add_to_queue(audio=audio, direction='right')
@@ -40,10 +60,10 @@ class AudioQueue:
     async def append_left(self, audio: Audio) -> None:
         await self._add_to_queue(audio=audio, direction='left')
 
-    def get_current_audio(self) -> Audio:
+    def get_current_audio(self) -> Union[Audio, None]:
         return self.current_audio
 
-    async def get_next_audio(self) -> Union[Audio, None]:
+    def get_next_audio(self) -> Union[Audio, None]:
         next_audio = None
         if len(self.queue) > 0:
             if self.current_audio:
@@ -52,7 +72,7 @@ class AudioQueue:
             self.current_audio = next_audio
             logging.info('Retrieved next song: %s', next_audio)
         else:
-            if self.current_audio:
+            if self._current_audio:
                 self._add_to_previous_queue(audio=self.current_audio)
             self.current_audio = None
             logging.warning('Unable to get next song, queue is empty')
@@ -65,11 +85,11 @@ class AudioQueue:
         else:
             self.previous_queue.append(audio)
 
-    async def get_previous_audio(self) -> Union[Audio, None]:
+    def get_previous_audio(self) -> Union[Audio, None]:
         previous_audio = None
         if len(self.previous_queue) > 0:
-            if self.current_audio:
-                self.queue.appendleft(self.current_audio)
+            if self._current_audio:
+                self.queue.appendleft(self._current_audio)
             previous_audio = self.previous_queue.pop()
             self.current_audio = previous_audio
             logging.info('Retrieved previous audio: %s', previous_audio)
@@ -78,10 +98,10 @@ class AudioQueue:
         return previous_audio
 
     async def restart_queue(self) -> None:
-        await self.append_left(self.current_audio)
-        self.current_audio = None
+        await self.append_left(self._current_audio)
         self.queue = self.previous_queue + self.queue
         self.previous_queue = deque()
+        self.get_next_audio()
 
     async def _add_to_queue(self, audio: Audio, direction: str = 'right'):
         if isinstance(audio, Audio):
@@ -103,7 +123,7 @@ class AudioQueue:
         return len(self.queue) < self.max_queue_size
 
     def reset_queue(self) -> None:
-        self.current_audio = None
+        self._current_audio = None
         self.clear_next_queue()
         self.clear_previous_queue()
 
@@ -138,5 +158,5 @@ class AudioQueue:
         previous_audio = [f'{idx+1}. {x}' for idx, x in enumerate(self.previous_queue)]
         previous_audio = '\n'.join(previous_audio)
 
-        songs = f'Current audio: {self.current_audio}\nNext audio: {next_audio}\nPrevious audio: {previous_audio}'
+        songs = f'Current audio: {self._current_audio}\nNext audio: {next_audio}\nPrevious audio: {previous_audio}'
         return songs

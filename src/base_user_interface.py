@@ -39,6 +39,11 @@ class UserInterface(ABC):
         self._auto_refresh_ui.change_interval(seconds=3)
 
     async def new_ui(self, text_channel: TextChannel) -> None:
+        if text_channel is None:
+            logging.warning('Invalid text channel, attempting refresh')
+            await self.refresh_ui()
+            return
+
         logging.info('Creating new UI')
         view = await self.get_view()
         embed = await self.get_embed()
@@ -90,7 +95,7 @@ class UserInterface(ABC):
             await self._release_lock()
 
     async def _acquire_lock(self) -> None:
-        while not self.lock.acquire(blocking=False):
+        if self.lock.acquire(blocking=False):
             await sleep(0.1)
 
     async def _release_lock(self) -> None:

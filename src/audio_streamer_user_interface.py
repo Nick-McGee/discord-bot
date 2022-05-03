@@ -2,11 +2,12 @@ import logging
 from datetime import datetime
 from typing import Callable, Union
 
-from discord import Interaction, Embed, ButtonStyle
+from discord import Interaction, Embed, ButtonStyle, TextChannel
 from discord.ui import Button, View
 
 from base_user_interface import UserInterface
-from audio import AudioQueue
+from audio import Audio, AudioQueue
+from async_event_handler import subscribe
 import config.logger
 
 
@@ -17,6 +18,15 @@ class StreamerUserInterface(UserInterface):
         super().__init__()
         self.change_audio_function = change_audio_function
         self.queue = queue
+        subscribe('new_audio', self.new_ui)
+        subscribe('no_audio', self.refresh_ui)
+
+    async def new_ui(self, data: Union[Audio, TextChannel]) -> None:
+        if isinstance(data, Audio):
+            await super().new_ui(text_channel=data.text_channel)
+        else:
+            await super().new_ui(text_channel=data)
+        self.start_auto_refresh()
 
     async def get_embed(self) -> Embed:
         if self.queue.get_current_audio() is None:
@@ -92,12 +102,12 @@ class StreamerUserInterface(UserInterface):
     async def previous_audio_callback(self, interaction: Interaction):
         logging.info('Previous audio button selected')
         if interaction.user.voice and interaction.user.voice.channel is not None:
-            await self.change_audio_function(direction='prev')
+            self.change_audio_function(previous=True)
 
     async def next_audio_callback(self, interaction: Interaction):
         logging.info('Next audio button selected: %s', interaction.user)
         if interaction.user.voice and interaction.user.voice.channel is not None:
-            await self.change_audio_function(direction='next')
+            self.change_audio_function()
 
     @staticmethod
     def calculate_time_left(end_time: datetime) -> str:
