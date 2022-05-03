@@ -1,6 +1,5 @@
 import logging
 from typing import Callable, Union
-import asyncio
 
 from discord import Bot, VoiceChannel, FFmpegPCMAudio, PCMVolumeTransformer
 from discord.errors import ClientException
@@ -45,7 +44,7 @@ class Voice:
             self.client.source = audio_source
         else:
             try:
-                await asyncio.to_thread(self.client.play, source=audio_source, after=self.after)
+                self.client.play(source=audio_source, after=self.after)
             except (TypeError, AttributeError, ClientException, OpusNotLoaded) as exception:
                 logging.error('Error playing audio: %s', exception)
 
