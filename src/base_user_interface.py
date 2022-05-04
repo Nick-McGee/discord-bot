@@ -1,9 +1,10 @@
 import logging
+from typing import Union
 from asyncio import sleep
 from threading import Lock
 from abc import ABC, abstractmethod
 
-from discord import Bot, TextChannel, Guild, Embed
+from discord import Bot, Message, TextChannel, Guild, Embed
 from discord.ui import View
 from discord.errors import NotFound
 from discord.ext import tasks
@@ -15,6 +16,8 @@ class UserInterface(ABC):
     def __init__(self):
         self.current_ui = None
         self.lock = Lock()
+
+    # TODO: Rework this, do I need slow and fast?
 
     @tasks.loop(seconds=3)
     async def _auto_refresh_ui(self) -> None:
@@ -74,17 +77,20 @@ class UserInterface(ABC):
         finally:
             await self._release_lock()
 
-    async def delete_ui(self, bot: Bot, guild: Guild) -> None:
+    async def delete_ui(self, bot: Bot, guild: Guild, ignore_msg_ids: Union[set[Union[int, None]], None] = None) -> None:
         await self._acquire_lock()
+        self.stop_auto_refresh()
 
         try:
-            message_list = []
+            channel_list = []
             for text_channels in guild.text_channels:
-                message_list.append(await text_channels.history(limit=100).flatten())
+                channel_list.append(await text_channels.history(limit=100).flatten())
 
-            for channel in message_list:
+            for channel in channel_list:
                 for message in channel:
-                    if message.author.id == bot.user.id:
+                    if isinstance(ignore_msg_ids, set) and message.id in ignore_msg_ids:
+                        pass
+                    elif message.author.id == bot.user.id:
                         await message.delete()
 
             self.current_ui = None

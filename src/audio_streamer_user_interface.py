@@ -20,6 +20,7 @@ class StreamerUserInterface(UserInterface):
         self.queue = queue
         subscribe('new_audio', self.new_ui)
         subscribe('no_audio', self.refresh_ui)
+        subscribe('no_audio', self.slow_auto_refresh)
 
     async def new_ui(self, data: Union[Audio, TextChannel]) -> None:
         self.start_auto_refresh()

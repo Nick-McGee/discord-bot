@@ -1,13 +1,13 @@
 import logging
 from typing import Union
-from asyncio import sleep, get_event_loop
+from asyncio import get_event_loop, all_tasks
 
-from discord import Bot, ApplicationContext, TextChannel, User, Member, VoiceChannel, Embed, Colour
-from discord.ext import commands, tasks
-from discord.commands import slash_command, Option
+from discord import Bot, ApplicationContext, ClientException, HTTPException, TextChannel, User, Member, VoiceChannel, Embed, Colour
+from discord.ext import commands
+from discord.commands import Option, slash_command
 from pytube import Playlist
 
-from audio import AudioQueue
+from audio import Audio, AudioQueue
 from voice import Voice
 from audio_streamer_user_interface import StreamerUserInterface
 from youtube_client import get_audio, get_playlist
@@ -26,7 +26,6 @@ class AudioStreamer(commands.Cog):
         self.queue = AudioQueue(event_loop = get_event_loop())
         self.user_interface = StreamerUserInterface(change_audio_function = self.change_audio,
                                                     queue = self.queue)
-        self.cancel_queue_playlist = False
 
     @slash_command(name='play', description='Queue YouTube audio files via a search query or URL', guild_ids=[GUILD_ID])
     async def play_command(self, ctx: ApplicationContext, query: Option(str, 'Search or URL')) -> None:
@@ -71,10 +70,12 @@ class AudioStreamer(commands.Cog):
                                               color=Colour.green()),
                                   delete_after=DELETE_TIMER)
 
-                await self.queue_playlist(author=ctx.author,
-                                          voice_channel=ctx.author.voice.channel,
-                                          text_channel=ctx.channel,
-                                          playlist=playlist)
+                get_event_loop().create_task(coro=self.queue_playlist(author=ctx.author,
+                                                                      voice_channel=ctx.author.voice.channel,
+                                                                      text_channel=ctx.channel,
+                                                                      playlist=playlist),
+                                             name='playlist')
+
         except KeyError as key_error:
             logging.error('Key error queuing playlist: %s', key_error)
             await ctx.respond(embed=Embed(title='Error', description=f'Unable to queue playlist **{url}**', color=red),
@@ -90,7 +91,7 @@ class AudioStreamer(commands.Cog):
     @slash_command(name='clear_queue', description='Clear the up next queue', guild_ids=[GUILD_ID])
     async def clear_up_next_command(self, ctx: ApplicationContext) -> None:
         logging.info('Clear command invoked')
-        self.cancel_queue_playlist = True
+        self.cancel_playlist()
         self.queue.clear_next_queue()
         await ctx.respond(embed=Embed(title='Cleared Up Next Queue', color=green),
                           delete_after=DELETE_TIMER)
@@ -105,10 +106,9 @@ class AudioStreamer(commands.Cog):
     @slash_command(name='remove', description='Skips and removes the currently playing song from the queue', guild_ids=[GUILD_ID])
     async def remove_command(self, ctx: ApplicationContext) -> None:
         logging.info('Remove from queue command invoked')
-        if self.queue.get_current_audio():
-            song_title = self.queue.get_current_audio().title
-            self.queue.current_audio = None
-            await ctx.respond(embed=Embed(title='Remove from Queue', description=f'Removed **{song_title}**', color=green),
+        audio_title = self.queue.remove_current_audio()
+        if audio_title:
+            await ctx.respond(embed=Embed(title='Remove from Queue', description=f'Removed **{audio_title}**', color=green),
                               delete_after=DELETE_TIMER)
         else:
             await ctx.respond(embed=Embed(title='Unable to Remove from Queue', description='Unable to find current audio to remove', color=red),
@@ -117,10 +117,13 @@ class AudioStreamer(commands.Cog):
     @slash_command(name='reset', description='Reset the voice client, queue, and user interface', guild_ids=[GUILD_ID])
     async def reset_command(self, ctx: ApplicationContext) -> None:
         logging.info('Reset command invoked')
-        await self.voice.reset_voice()
-        self.reset_queue()
-        await self.user_interface.delete_ui(bot=self.bot, guild=ctx.guild)
-        self.user_interface.restart_auto_refresh()
+        self.cancel_playlist()
+        self.queue.reset_queue()
+
+        await self.voice.disconnect_voice()
+
+        ctx_message_id = await self.get_id_from_ctx(ctx=ctx)
+        await self.user_interface.delete_ui(bot=self.bot, guild=ctx.guild, ignore_msg_ids={ctx_message_id})
 
         await ctx.respond(embed=Embed(title='Reset Bot',
                                       description=f'**{self.bot.user.display_name}** has been reset',
@@ -144,23 +147,8 @@ class AudioStreamer(commands.Cog):
             await ctx.respond(embed=Embed(title='Unable to Connect', description=f'Error connecting **{self.bot.user.display_name}** to voice', color=red),
                               delete_after=DELETE_TIMER)
 
-    @tasks.loop(seconds=10)
-    async def timeout(self) -> None:
-        if not self.voice.is_playing():
-            tries = 10
-            while tries > 0:
-                await sleep(1)
-                if self.voice.is_playing():
-                    return
-                tries -= 1
-
-            if not self.voice.is_playing():
-                self.user_interface.slow_auto_refresh()
-                await self.voice.reset_voice()
-
     @commands.Cog.listener()
     async def on_ready(self):
-        self.timeout.start()
         await self.bot.wait_until_ready()
         guild = self.bot.guilds[0]
         await self.user_interface.delete_ui(bot=self.bot, guild=guild)
@@ -174,49 +162,11 @@ class AudioStreamer(commands.Cog):
     @remove_command.before_invoke
     @reset_command.before_invoke
     @reconnect_bot.before_invoke
-    async def ensure_voice(self, ctx: ApplicationContext) -> None:
+    async def defer_and_check_voice(self, ctx: ApplicationContext) -> None:
         await ctx.defer()
         if ctx.author and ctx.author.voice is None:
             await ctx.respond(embed=Embed(title='Error', description='You are not connected to a voice channel', color=red),
                               delete_after=DELETE_TIMER)
-
-    async def queue_audio(self,
-                          query: str,
-                          author: Union[User, Member],
-                          voice_channel: VoiceChannel,
-                          text_channel: TextChannel,
-                          add_to_start: bool = False) -> Union[str, None]:
-        logging.info('Queuing %s', query)
-        audio = await get_event_loop().run_in_executor(None, get_audio, query, author, voice_channel, text_channel)
-        audio_title = None
-
-        if audio:
-            logging.info('Queued %s %s', audio.title, audio.audio_url)
-            if add_to_start:
-                await self.queue.append_left(audio=audio)
-            else:
-                await self.queue.append(audio=audio)
-            await self.user_interface.refresh_ui()
-            audio_title = audio.title
-        else:
-            logging.error('Unable to queue audio %s', query)
-
-        return audio_title
-
-    async def queue_playlist(self,
-                             author: Union[User, Member],
-                             voice_channel: VoiceChannel,
-                             text_channel: TextChannel,
-                             playlist: Playlist) -> None:
-        self.cancel_queue_playlist = False
-        for url in playlist:
-            await self.queue_audio(author=author,
-                                   voice_channel=voice_channel,
-                                   text_channel=text_channel,
-                                   query=url)
-            if self.cancel_queue_playlist is True:
-                self.queue.clear_next_queue()
-                break
 
     def change_audio(self, previous: bool = False) -> None:
         if previous:
@@ -226,6 +176,62 @@ class AudioStreamer(commands.Cog):
             logging.info('Getting next audio')
             self.queue.get_next_audio()
 
-    def reset_queue(self) -> None:
-        self.cancel_queue_playlist = True
-        self.queue.reset_queue()
+    async def queue_audio(self,
+                          query: str,
+                          author: Union[User, Member],
+                          voice_channel: VoiceChannel,
+                          text_channel: TextChannel,
+                          add_to_start: bool = False) -> Union[str, None]:
+        logging.info('Queuing %s', query)
+        entry = await get_event_loop().run_in_executor(None, get_audio, query)
+
+        title = None
+        if entry:
+            audio = Audio(author=author,
+                          voice_channel=voice_channel,
+                          text_channel=text_channel,
+                          audio_url=entry['audio_url'],
+                          webpage_url=entry['webpage_url'],
+                          title=entry['title'],
+                          length=entry['length'],
+                          thumbnail=entry['thumbnail'])
+
+            if add_to_start:
+                await self.queue.append_left(audio=audio)
+            else:
+                await self.queue.append(audio=audio)
+
+            await self.user_interface.refresh_ui()
+            logging.info('Queued %s %s', audio.title, audio.audio_url)
+
+            title = entry['title']
+        else:
+            logging.error('Unable to queue audio %s', query)
+        return title
+
+    async def queue_playlist(self,
+                             author: Union[User, Member],
+                             voice_channel: VoiceChannel,
+                             text_channel: TextChannel,
+                             playlist: Playlist) -> None:
+        for url in playlist:
+            await self.queue_audio(author=author,
+                                   voice_channel=voice_channel,
+                                   text_channel=text_channel,
+                                   query=url)
+
+    @classmethod
+    async def get_id_from_ctx(cls, ctx: ApplicationContext):
+        try:
+            ctx_message = await ctx.interaction.original_message()
+            ctx_message_id = ctx_message.id
+        except (HTTPException, ClientException) as msg_not_found:
+            logging.error('Unable to find message: %s', msg_not_found)
+            ctx_message_id = None
+        return ctx_message_id
+
+    @classmethod
+    def cancel_playlist(cls) -> None:
+        tasks = [task for task in all_tasks() if task.get_name() == 'playlist']
+        for task in tasks:
+            task.cancel()

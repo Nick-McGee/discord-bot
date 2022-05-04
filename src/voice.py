@@ -20,7 +20,7 @@ class Voice:
         self.after_function = after_function
         self.client = None
         subscribe(event_type = 'new_audio', function = self.stream)
-        subscribe(event_type = 'no_audio', function = self.stop_voice)
+        subscribe(event_type = 'no_audio', function = self.disconnect_voice)
 
     async def join_voice(self, voice_channel: VoiceChannel) -> None:
         try:
@@ -44,6 +44,7 @@ class Voice:
             self.client.source = audio_source
         else:
             try:
+                # Look at using to thread
                 self.client.play(source=audio_source, after=self.after)
             except (TypeError, AttributeError, ClientException, OpusNotLoaded) as exception:
                 logging.error('Error playing audio: %s', exception)
@@ -54,16 +55,12 @@ class Voice:
         if self.after_function:
             self.after_function()
 
-    async def reset_voice(self) -> None:
-        await self.disconnect_voice()
-        self.client = None
-        self._audio_source = None
-
     async def disconnect_voice(self) -> None:
         try:
             await self.client.disconnect(force=True)
         except (AttributeError, TypeError) as missing_client:
             logging.warning('No voice client connected to stop: %s', missing_client)
+        self.client = None
 
     def stop_voice(self) -> None:
         try:

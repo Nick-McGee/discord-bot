@@ -5,9 +5,11 @@ from typing import Union
 from asyncio import AbstractEventLoop
 from dataclasses import dataclass, field
 
+from requests import head
 from discord import TextChannel, Member, User, VoiceChannel
 
 from async_event_handler import post_event
+from youtube_client import get_audio 
 
 import config.logger
 
@@ -28,6 +30,22 @@ class Audio:
     def __str__(self) -> str:
         return self.title
 
+    def is_stale(self) -> bool:
+        return head(self.audio_url).status_code != 200
+
+    def refresh(self) -> bool:
+        entry = get_audio(query=self.webpage_url)
+        if entry:
+            self.audio_url = entry['audio_url']
+            self.webpage_url = entry['webpage_url']
+            self.title = entry['title']
+            self.length = entry['length']
+            self.thumbnail = entry['thumbnail']
+            logging.info('Refreshed audio: %s', self.title)
+            return True
+        else:
+            logging.error('Unable to refresh audio: %s', self.title)
+            return False
 
 class AudioQueue:
     def __init__(self,
@@ -47,6 +65,9 @@ class AudioQueue:
 
     @current_audio.setter
     def current_audio(self, audio: Union[Audio, None]) -> None:
+        if audio and audio.is_stale():
+            audio.refresh()
+
         self._current_audio = audio
         if self._current_audio:
             self._current_audio.end_time = datetime.now() + timedelta(seconds=self._current_audio.length)
@@ -108,7 +129,7 @@ class AudioQueue:
             if self._is_below_max_queue_size():
                 if direction == 'right':
                     self.queue.append(audio)
-                    if self.current_audio == None:
+                    if self.current_audio is None:
                         self.get_next_audio()
                 elif direction == 'left':
                     self.queue.appendleft(audio)
@@ -125,9 +146,18 @@ class AudioQueue:
         return len(self.queue) < self.max_queue_size
 
     def reset_queue(self) -> None:
-        self._current_audio = None
         self.clear_next_queue()
         self.clear_previous_queue()
+        self._current_audio = None
+
+    def remove_current_audio(self) -> Union[str, None]:
+        if self.get_current_audio():
+            title = self._current_audio.title
+            self._current_audio = None
+            self.get_next_audio()
+            return title
+        else:
+            return None
 
     def clear_next_queue(self) -> None:
         self.queue = deque()
