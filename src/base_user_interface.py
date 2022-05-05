@@ -4,7 +4,7 @@ from asyncio import sleep
 from threading import Lock
 from abc import ABC, abstractmethod
 
-from discord import Bot, Message, TextChannel, Guild, Embed
+from discord import Bot, TextChannel, Guild, Embed
 from discord.ui import View
 from discord.errors import NotFound
 from discord.ext import tasks
@@ -17,14 +17,11 @@ class UserInterface(ABC):
         self.current_ui = None
         self.lock = Lock()
 
-    # TODO: Rework this, do I need slow and fast?
-
     @tasks.loop(seconds=3)
     async def _auto_refresh_ui(self) -> None:
         await self.refresh_ui()
 
     def start_auto_refresh(self) -> None:
-        self.fast_auto_refresh()
         if not self._auto_refresh_ui.is_running():
             self._auto_refresh_ui.start()
 
@@ -32,16 +29,10 @@ class UserInterface(ABC):
         self._auto_refresh_ui.stop()
 
     def restart_auto_refresh(self) -> None:
-        self.fast_auto_refresh()
         self._auto_refresh_ui.restart()
 
-    def slow_auto_refresh(self) -> None:
-        self._auto_refresh_ui.change_interval(minutes=1)
-
-    def fast_auto_refresh(self) -> None:
-        self._auto_refresh_ui.change_interval(seconds=3)
-
     async def new_ui(self, text_channel: TextChannel) -> None:
+        self.start_auto_refresh()
         if text_channel is None:
             logging.warning('Invalid text channel, attempting refresh')
             await self.refresh_ui()

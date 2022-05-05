@@ -18,12 +18,11 @@ class StreamerUserInterface(UserInterface):
         super().__init__()
         self.change_audio_function = change_audio_function
         self.queue = queue
-        subscribe('new_audio', self.new_ui)
-        subscribe('no_audio', self.refresh_ui)
-        subscribe('no_audio', self.slow_auto_refresh)
+        subscribe(event_type = 'new_audio', function = self.new_ui)
+        subscribe(event_type = 'no_audio', function = self.refresh_ui)
+        subscribe(event_type = 'queue_update', function = self.refresh_ui)
 
     async def new_ui(self, data: Union[Audio, TextChannel]) -> None:
-        self.start_auto_refresh()
         if isinstance(data, Audio):
             await super().new_ui(text_channel=data.text_channel)
         else:

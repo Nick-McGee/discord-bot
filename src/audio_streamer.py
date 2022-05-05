@@ -2,9 +2,10 @@ import logging
 from typing import Union
 from asyncio import get_event_loop, all_tasks
 
-from discord import Bot, ApplicationContext, ClientException, HTTPException, TextChannel, User, Member, VoiceChannel, Embed, Colour
+from discord import Bot, ApplicationContext, ClientException, TextChannel, User, Member, VoiceChannel, Embed, Colour
 from discord.ext import commands
 from discord.commands import Option, slash_command
+from discord.errors import HTTPException
 from pytube import Playlist
 
 from audio import Audio, AudioQueue
@@ -221,7 +222,13 @@ class AudioStreamer(commands.Cog):
                                    query=url)
 
     @classmethod
-    async def get_id_from_ctx(cls, ctx: ApplicationContext):
+    def cancel_playlist(cls) -> None:
+        tasks = [task for task in all_tasks() if task.get_name() == 'playlist']
+        for task in tasks:
+            task.cancel()
+
+    @staticmethod
+    async def get_id_from_ctx(ctx: ApplicationContext):
         try:
             ctx_message = await ctx.interaction.original_message()
             ctx_message_id = ctx_message.id
@@ -229,9 +236,3 @@ class AudioStreamer(commands.Cog):
             logging.error('Unable to find message: %s', msg_not_found)
             ctx_message_id = None
         return ctx_message_id
-
-    @classmethod
-    def cancel_playlist(cls) -> None:
-        tasks = [task for task in all_tasks() if task.get_name() == 'playlist']
-        for task in tasks:
-            task.cancel()

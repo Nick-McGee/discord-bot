@@ -9,7 +9,7 @@ from requests import head
 from discord import TextChannel, Member, User, VoiceChannel
 
 from async_event_handler import post_event
-from youtube_client import get_audio 
+from youtube_client import get_audio
 
 import config.logger
 
@@ -24,7 +24,6 @@ class Audio:
     title: str
     length: float
     thumbnail: str
-    start_time: datetime = field(init=False)
     end_time: datetime = field(init=False)
 
     def __str__(self) -> str:
@@ -137,6 +136,7 @@ class AudioQueue:
                     self.queue.append(audio)
                     logging.error('Unknown direction \'direction\', appending to \'right\'')
                 logging.info('Audio added to queue: %s', audio)
+                post_event(event_type='queue_update', loop=self.event_loop)
             else:
                 logging.error('Unable to add audio, queue size greater than %s', self.max_queue_size)
         else:
@@ -161,9 +161,11 @@ class AudioQueue:
 
     def clear_next_queue(self) -> None:
         self.queue = deque()
+        post_event(event_type='queue_update', loop=self.event_loop)
 
     def clear_previous_queue(self) -> None:
         self.previous_queue = deque()
+        post_event(event_type='queue_update', loop=self.event_loop)
 
     async def get_queue_as_str(self, amount: int = 5) -> Union[str, None]:
         next_audio = ''
