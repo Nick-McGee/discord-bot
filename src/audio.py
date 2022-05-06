@@ -6,6 +6,8 @@ from asyncio import AbstractEventLoop
 from dataclasses import dataclass, field
 
 from requests import head
+from requests.exceptions import ConnectionError
+from urllib3.exceptions import MaxRetryError, NewConnectionError
 from discord import TextChannel, Member, User, VoiceChannel
 
 from async_event_handler import post_event
@@ -30,7 +32,11 @@ class Audio:
         return self.title
 
     def is_stale(self) -> bool:
-        return head(self.audio_url).status_code != 200
+        try:
+            return head(self.audio_url).status_code != 200
+        except (MaxRetryError, NewConnectionError, ConnectionError) as connection_error:
+            logging.warning('Unable to connect to %s: %s', self.audio_url, connection_error)
+            return True
 
     def refresh(self) -> bool:
         entry = get_audio(query=self.webpage_url)
