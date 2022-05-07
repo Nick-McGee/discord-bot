@@ -47,7 +47,6 @@ class Voice:
             self.client.source = audio_source
         else:
             try:
-                # Look at using to thread
                 await to_thread(self.client.play(source=audio_source, after=self.after))
             except (TypeError, AttributeError, ClientException, OpusNotLoaded) as error_msg:
                 logging.error('Error playing audio: %s', error_msg)
