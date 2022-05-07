@@ -1,6 +1,4 @@
 import logging
-from typing import Union
-from asyncio import sleep
 from threading import Lock
 from abc import ABC, abstractmethod
 
@@ -17,7 +15,7 @@ class UserInterface(ABC):
         self.current_ui = None
         self.lock = Lock()
 
-    @tasks.loop(seconds=3)
+    @tasks.loop(seconds=2.5)
     async def _auto_refresh_ui(self) -> None:
         await self.refresh_ui()
 
@@ -39,10 +37,9 @@ class UserInterface(ABC):
             return
 
         logging.info('Creating new UI')
+        self.lock.acquire(blocking=False)
         view = await self.get_view()
         embed = await self.get_embed()
-
-        await self._acquire_lock()
 
         try:
             if self.current_ui:
@@ -55,10 +52,12 @@ class UserInterface(ABC):
 
     async def refresh_ui(self) -> None:
         logging.info('Refreshing UI')
+        if not self.lock.acquire(blocking=False):
+            logging.warning('UI locked, refreshing UI stopped')
+            return
+
         view = await self.get_view()
         embed = await self.get_embed()
-
-        await self._acquire_lock()
 
         try:
             if self.current_ui is not None:
@@ -68,8 +67,8 @@ class UserInterface(ABC):
         finally:
             await self._release_lock()
 
-    async def delete_ui(self, bot: Bot, guild: Guild, ignore_msg_ids: Union[set[Union[int, None]], None] = None) -> None:
-        await self._acquire_lock()
+    async def delete_ui(self, bot: Bot, guild: Guild, ignore_msg_ids: set[int | None] | None = None) -> None:
+        self.lock.acquire(blocking=False)
         self.stop_auto_refresh()
 
         try:
@@ -90,10 +89,6 @@ class UserInterface(ABC):
             logging.error('UI not found: %s', not_found)
         finally:
             await self._release_lock()
-
-    async def _acquire_lock(self) -> None:
-        if self.lock.acquire(blocking=False):
-            await sleep(0.1)
 
     async def _release_lock(self) -> None:
         try:

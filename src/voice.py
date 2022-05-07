@@ -1,5 +1,6 @@
 import logging
-from typing import Callable, Union
+from typing import Callable
+from asyncio import to_thread
 
 from discord import Bot, VoiceChannel, FFmpegPCMAudio, PCMVolumeTransformer
 from discord.errors import ClientException
@@ -13,9 +14,11 @@ from config.settings import FFMPEG_OPTS
 
 
 class Voice:
+    __slots__ = 'bot', 'after_function', 'client'
+
     def __init__(self,
                  bot: Bot,
-                 after_function: Union[Callable, None] = None):
+                 after_function: Callable | None = None):
         self.bot = bot
         self.after_function = after_function
         self.client = None
@@ -45,11 +48,11 @@ class Voice:
         else:
             try:
                 # Look at using to thread
-                self.client.play(source=audio_source, after=self.after)
-            except (TypeError, AttributeError, ClientException, OpusNotLoaded) as exception:
-                logging.error('Error playing audio: %s', exception)
+                await to_thread(self.client.play(source=audio_source, after=self.after))
+            except (TypeError, AttributeError, ClientException, OpusNotLoaded) as error_msg:
+                logging.error('Error playing audio: %s', error_msg)
 
-    def after(self, e: Exception) -> Union[Callable, None]:
+    def after(self, e: Exception) -> Callable | None:
         if e:
             logging.error('Play error: %s', e)
         if self.after_function:

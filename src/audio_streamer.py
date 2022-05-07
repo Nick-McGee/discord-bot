@@ -1,5 +1,4 @@
 import logging
-from typing import Union
 from asyncio import get_event_loop, all_tasks
 
 from discord import Bot, ApplicationContext, ClientException, TextChannel, User, Member, VoiceChannel, Embed, Colour
@@ -12,6 +11,7 @@ from audio import Audio, AudioQueue
 from voice import Voice
 from audio_streamer_user_interface import StreamerUserInterface
 from youtube_client import get_audio, get_playlist
+
 import config.logger
 from config.settings import DELETE_TIMER
 from config.auth import GUILD_ID
@@ -21,6 +21,8 @@ red = Colour.red()
 
 
 class AudioStreamer(commands.Cog):
+    __slots__ = 'bot', 'voice', 'queue', 'user_interface'
+
     def __init__(self, bot: Bot):
         self.bot = bot
         self.voice = Voice(bot = bot, after_function = self.change_audio)
@@ -151,7 +153,7 @@ class AudioStreamer(commands.Cog):
     @commands.Cog.listener()
     async def on_ready(self):
         await self.bot.wait_until_ready()
-        guild = self.bot.guilds[0]
+        guild = await self.bot.fetch_guild(GUILD_ID)
         await self.user_interface.delete_ui(bot=self.bot, guild=guild)
 
     @play_command.before_invoke
@@ -179,10 +181,10 @@ class AudioStreamer(commands.Cog):
 
     async def queue_audio(self,
                           query: str,
-                          author: Union[User, Member],
+                          author: User | Member,
                           voice_channel: VoiceChannel,
                           text_channel: TextChannel,
-                          add_to_start: bool = False) -> Union[str, None]:
+                          add_to_start: bool = False) -> str | None:
         logging.info('Queuing %s', query)
         entry = await get_event_loop().run_in_executor(None, get_audio, query)
 
@@ -211,7 +213,7 @@ class AudioStreamer(commands.Cog):
         return title
 
     async def queue_playlist(self,
-                             author: Union[User, Member],
+                             author: User | Member,
                              voice_channel: VoiceChannel,
                              text_channel: TextChannel,
                              playlist: Playlist) -> None:
@@ -221,8 +223,8 @@ class AudioStreamer(commands.Cog):
                                    text_channel=text_channel,
                                    query=url)
 
-    @classmethod
-    def cancel_playlist(cls) -> None:
+    @staticmethod
+    def cancel_playlist() -> None:
         tasks = [task for task in all_tasks() if task.get_name() == 'playlist']
         for task in tasks:
             task.cancel()

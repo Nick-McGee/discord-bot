@@ -1,7 +1,6 @@
 import logging
 from datetime import datetime, timedelta
 from collections import deque
-from typing import Union
 from asyncio import AbstractEventLoop
 from dataclasses import dataclass, field
 
@@ -16,9 +15,9 @@ from youtube_client import get_audio
 import config.logger
 
 
-@dataclass
+@dataclass(slots=True)
 class Audio:
-    author: Union[Member, User]
+    author: Member | User
     voice_channel: VoiceChannel
     text_channel: TextChannel
     audio_url: str
@@ -53,6 +52,8 @@ class Audio:
             return False
 
 class AudioQueue:
+    __slots__ = 'event_loop', 'max_queue_size', 'max_previous_queue_size', 'queue', 'previous_queue', '_current_audio'
+
     def __init__(self,
                  event_loop = AbstractEventLoop,
                  max_queue_size: int = 10000,
@@ -65,11 +66,11 @@ class AudioQueue:
         self._current_audio = None
 
     @property
-    def current_audio(self) -> Union[Audio, None]:
+    def current_audio(self) -> Audio | None:
         return self._current_audio
 
     @current_audio.setter
-    def current_audio(self, audio: Union[Audio, None]) -> None:
+    def current_audio(self, audio: Audio | None) -> None:
         if audio and audio.is_stale():
             audio.refresh()
 
@@ -86,10 +87,10 @@ class AudioQueue:
     async def append_left(self, audio: Audio) -> None:
         await self._add_to_queue(audio=audio, direction='left')
 
-    def get_current_audio(self) -> Union[Audio, None]:
+    def get_current_audio(self) -> Audio | None:
         return self.current_audio
 
-    def get_next_audio(self) -> Union[Audio, None]:
+    def get_next_audio(self) -> Audio | None:
         next_audio = None
         if len(self.queue) > 0:
             if self.current_audio:
@@ -111,7 +112,7 @@ class AudioQueue:
         else:
             self.previous_queue.append(audio)
 
-    def get_previous_audio(self) -> Union[Audio, None]:
+    def get_previous_audio(self) -> Audio | None:
         previous_audio = None
         if len(self.previous_queue) > 0:
             if self._current_audio:
@@ -156,7 +157,7 @@ class AudioQueue:
         self.clear_previous_queue()
         self._current_audio = None
 
-    def remove_current_audio(self) -> Union[str, None]:
+    def remove_current_audio(self) -> str | None:
         if self.get_current_audio():
             title = self._current_audio.title
             self._current_audio = None
@@ -173,13 +174,13 @@ class AudioQueue:
         self.previous_queue = deque()
         post_event(event_type='queue_update', loop=self.event_loop)
 
-    async def get_queue_as_str(self, amount: int = 5) -> Union[str, None]:
+    async def get_queue_as_str(self, amount: int = 5) -> str | None:
         next_audio = ''
         for idx in range(min(amount, len(self.queue))):
             next_audio += f'{idx+1}. {self.queue[idx]}\n'
         return None if next_audio == '' else next_audio
 
-    async def get_previous_queue_as_str(self, amount: int = 3) -> Union[str, None]:
+    async def get_previous_queue_as_str(self, amount: int = 3) -> str | None:
         previous_audio = ''
         for idx in range(min(amount, len(self.previous_queue))):
             previous_audio += f'{idx+1}. {self.previous_queue[-idx-1]}\n'

@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime
-from typing import Callable, Union
+from typing import Callable
 
 from discord import Interaction, Embed, ButtonStyle, TextChannel
 from discord.ui import Button, View
@@ -12,6 +12,8 @@ import config.logger
 
 
 class StreamerUserInterface(UserInterface):
+    __slots__ = 'change_audio_function', 'queue'
+
     def __init__(self,
                  change_audio_function: Callable,
                  queue: AudioQueue):
@@ -20,9 +22,10 @@ class StreamerUserInterface(UserInterface):
         self.queue = queue
         subscribe(event_type = 'new_audio', function = self.new_ui)
         subscribe(event_type = 'no_audio', function = self.refresh_ui)
+        subscribe(event_type = 'no_audio', function = self.stop_auto_refresh)
         subscribe(event_type = 'queue_update', function = self.refresh_ui)
 
-    async def new_ui(self, data: Union[Audio, TextChannel]) -> None:
+    async def new_ui(self, data: Audio | TextChannel) -> None:
         if isinstance(data, Audio):
             await super().new_ui(text_channel=data.text_channel)
         else:
@@ -46,29 +49,24 @@ class StreamerUserInterface(UserInterface):
                 embed.set_footer(text=f'Requested by {current_audio.author.display_name}',
                                 icon_url=current_audio.author.display_avatar)
 
-        next_audio_string = await self._get_audio_queue_strings(queue_type='next', amount=5)
+        next_audio_string = await self._get_audio_queue_strings(amount=5)
         if next_audio_string:
             embed.add_field(name='Next', value=next_audio_string, inline=False)
 
-        previous_audio_string = await self._get_audio_queue_strings(queue_type='prev', amount=3)
+        previous_audio_string = await self._get_audio_queue_strings(amount=3, get_prev=True)
         if previous_audio_string:
             embed.add_field(name='Previous', value=previous_audio_string, inline=False)
 
         return embed
 
-    async def _get_audio_queue_strings(self, queue_type: str, amount: int = 5) -> Union[str, None]:
-        if queue_type == 'next':
-            audios = await self.queue.get_queue_as_str(amount=amount)
-        elif queue_type == 'prev':
+    async def _get_audio_queue_strings(self, amount: int = 5, get_prev: bool = False) -> str | None:
+        if get_prev:
             audios = await self.queue.get_previous_queue_as_str(amount=amount)
         else:
-            logging.error('Unknown queue type \'%s\', defaulting to \'next\'')
             audios = await self.queue.get_queue_as_str(amount=amount)
 
         if audios:
-            if queue_type == 'next':
-                amount_past_max = self.queue.get_queue_length() - amount
-            elif queue_type == 'prev':
+            if get_prev:
                 amount_past_max = self.queue.get_previous_queue_length() - amount
             else:
                 amount_past_max = self.queue.get_queue_length() - amount
@@ -91,7 +89,7 @@ class StreamerUserInterface(UserInterface):
             next_audio_button = Button(disabled=True, style=ButtonStyle.secondary, emoji='⏭')
         next_audio_button.callback = self.next_audio_callback
 
-        view = View(previous_audio_button, next_audio_button)
+        view = View(previous_audio_button, next_audio_button, timeout=None)
 
         if self.queue.get_current_audio() is not None:
             go_to_youtube = Button(style=ButtonStyle.url, label='See on YouTube', url=self.queue.get_current_audio().webpage_url)
@@ -100,12 +98,14 @@ class StreamerUserInterface(UserInterface):
         return view
 
     async def previous_audio_callback(self, interaction: Interaction):
-        logging.info('Previous audio button selected')
+        logging.info('Previous audio button selected: %s', interaction.user)
+        await interaction.response.defer()
         if interaction.user.voice and interaction.user.voice.channel is not None:
             self.change_audio_function(previous=True)
 
     async def next_audio_callback(self, interaction: Interaction):
         logging.info('Next audio button selected: %s', interaction.user)
+        await interaction.response.defer()
         if interaction.user.voice and interaction.user.voice.channel is not None:
             self.change_audio_function()
 

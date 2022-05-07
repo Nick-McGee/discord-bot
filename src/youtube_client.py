@@ -1,5 +1,4 @@
 import logging
-from typing import Union
 
 from requests import head, ConnectionError
 from youtube_dl import YoutubeDL as yt
@@ -9,7 +8,7 @@ from pytube import Playlist
 import config.logger
 
 
-def get_audio(query: str) -> Union[dict, None]:
+def get_audio(query: str) -> dict | None:
     entry = _get_entry_from_youtube(query=query)
     if entry:
         entry = {'audio_url': entry['url'],
@@ -25,7 +24,7 @@ def get_playlist(playlist_url: str) -> Playlist:
     return Playlist(url=playlist_url)
 
 
-def _get_entry_from_youtube(query: str) -> Union[dict, None]:
+def _get_entry_from_youtube(query: str) -> dict | None:
     entry = None
     tries = 3
 
