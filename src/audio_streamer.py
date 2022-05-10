@@ -3,7 +3,7 @@ from asyncio import get_event_loop, all_tasks
 
 from discord import Bot, ApplicationContext, ClientException, TextChannel, User, Member, VoiceChannel, Embed, Colour
 from discord.ext import commands
-from discord.commands import Option, slash_command
+from discord.commands import slash_command, option
 from discord.errors import HTTPException
 from pytube import Playlist
 
@@ -31,7 +31,8 @@ class AudioStreamer(commands.Cog):
                                                     queue = self.queue)
 
     @slash_command(name='play', description='Queue YouTube audio files via a search query or URL', guild_ids=[GUILD_ID])
-    async def play_command(self, ctx: ApplicationContext, query: Option(str, 'Search or URL')) -> None:
+    @option('query', default='', description='Search or URL', required=True)
+    async def play_command(self, ctx: ApplicationContext, query: str) -> None:
         logging.info('Play command invoked')
         audio_title = await self.queue_audio(author=ctx.author,
                                              voice_channel=ctx.author.voice.channel,
@@ -45,7 +46,8 @@ class AudioStreamer(commands.Cog):
                               delete_after=DELETE_TIMER)
 
     @slash_command(name='play_next', description='Queue up next YouTube audio files via a search query or URL', guild_ids=[GUILD_ID])
-    async def play_next_command(self, ctx: ApplicationContext, query: Option(str, 'Search or URL')) -> None:
+    @option('query', default='', description='Search or URL', required=True)
+    async def play_next_command(self, ctx: ApplicationContext, query: str) -> None:
         logging.info('Play next command invoked')
         audio_title = await self.queue_audio(author=ctx.author,
                                              voice_channel=ctx.author.voice.channel,
@@ -60,7 +62,8 @@ class AudioStreamer(commands.Cog):
                               delete_after=DELETE_TIMER)
 
     @slash_command(name='playlist', description='Queue a series of audio files from a YouTube Playlist URL', guild_ids=[GUILD_ID])
-    async def playlist_command(self, ctx: ApplicationContext, url: Option(str, 'A playlist URL')) -> None:
+    @option('url', default='', description='A playlist URL', required=True)
+    async def playlist_command(self, ctx: ApplicationContext, url: str) -> None:
         logging.info('Playlist command invoked')
         playlist = get_playlist(playlist_url=url)
         try:
@@ -90,6 +93,26 @@ class AudioStreamer(commands.Cog):
         await self.queue.restart_queue()
         await ctx.respond(embed=Embed(title='Restarted Queue', color=green),
                           delete_after=DELETE_TIMER)
+
+    @slash_command(name='go_to', description='Go to a specific time in the audio. If no time is set, the audio is reset to the start', guild_ids=[GUILD_ID])
+    @option('hour', min=0, max=100, default=0, description='Hour [optional]')
+    @option('minute', min=0, max=59, default=0, description='Minute [optional, max: 59]')
+    @option('second', min=0, max=59, default=0, description='Second [optional, max: 59]')
+    async def go_to(self, ctx: ApplicationContext, hour: int, minute: int, second: int) -> None:
+        logging.info('Go to command invoked')
+        if self.voice.is_playing():
+            time, description = self._get_time_and_description(hour=hour, minute=minute, second=second)
+            if time >= self.queue.get_current_audio().length:
+                await ctx.respond(embed=Embed(title='Out of Bounds', description='Time requested is over song length', color=red),
+                                  delete_after=DELETE_TIMER)
+            else:
+                self.voice.go_to(time=time)
+                self.queue.get_current_audio().set_end_time(offset=time)
+                await ctx.respond(embed=Embed(title='Going To', description=description[:-2], color=green),
+                                  delete_after=DELETE_TIMER)
+        else:
+            await ctx.respond(embed=Embed(title='Error', description='There is currently no audio playing', color=red),
+                              delete_after=DELETE_TIMER)
 
     @slash_command(name='clear_queue', description='Clear the up next queue', guild_ids=[GUILD_ID])
     async def clear_up_next_command(self, ctx: ApplicationContext) -> None:
@@ -153,13 +176,14 @@ class AudioStreamer(commands.Cog):
     @commands.Cog.listener()
     async def on_ready(self):
         await self.bot.wait_until_ready()
-        guild = await self.bot.fetch_guild(GUILD_ID)
+        guild = next(guild for guild in self.bot.guilds if guild.id == GUILD_ID)
         await self.user_interface.delete_ui(bot=self.bot, guild=guild)
 
     @play_command.before_invoke
     @play_next_command.before_invoke
     @playlist_command.before_invoke
     @restart_queue.before_invoke
+    @go_to.before_invoke
     @clear_up_next_command.before_invoke
     @clear_previous_command.before_invoke
     @remove_command.before_invoke
@@ -238,3 +262,20 @@ class AudioStreamer(commands.Cog):
             logging.error('Unable to find message: %s', msg_not_found)
             ctx_message_id = None
         return ctx_message_id
+
+    @staticmethod
+    def _get_time_and_description(hour: int | None, minute: int | None, second: int | None) -> tuple[int, str]:
+        time = 0
+        description = 'Going to '
+        if hour:
+            time += hour * 60 * 60
+            description += f'**{hour} hour**, ' if hour == 1 else f'**{hour} hours**, '
+        if minute:
+            time += minute * 60
+            description += f'**{minute} minute**, ' if minute == 1 else f'**{minute} minutes**, '
+        if second:
+            time += second
+            description += f'**{second} second**, ' if second == 1 else f'**{second} seconds**, '
+        if time == 0:
+            description = 'Going to start  '
+        return time, description

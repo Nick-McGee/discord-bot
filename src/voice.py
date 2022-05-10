@@ -1,3 +1,4 @@
+from copy import copy
 import logging
 from typing import Callable
 from asyncio import to_thread
@@ -14,7 +15,7 @@ from config.settings import FFMPEG_OPTS
 
 
 class Voice:
-    __slots__ = 'bot', 'after_function', 'client'
+    __slots__ = 'bot', 'after_function', 'client', 'cur_audio'
 
     def __init__(self,
                  bot: Bot,
@@ -22,6 +23,7 @@ class Voice:
         self.bot = bot
         self.after_function = after_function
         self.client = None
+        self.cur_audio = None
         subscribe(event_type = 'new_audio', function = self.stream)
         subscribe(event_type = 'no_audio', function = self.disconnect_voice)
 
@@ -42,7 +44,9 @@ class Voice:
 
     async def stream(self, audio: Audio) -> None:
         await self.check_voice(voice_channel=audio.voice_channel)
-        audio_source = PCMVolumeTransformer(FFmpegPCMAudio(source=audio.audio_url, **FFMPEG_OPTS), volume=0.1)
+        audio_source = self._get_audio_source(audio=audio)
+        self.cur_audio = audio
+
         if self.is_playing():
             self.client.source = audio_source
         else:
@@ -52,10 +56,33 @@ class Voice:
                 logging.error('Error playing audio: %s', error_msg)
 
     def after(self, e: Exception) -> Callable | None:
+        self.cur_audio = None
         if e:
             logging.error('Play error: %s', e)
         if self.after_function:
             self.after_function()
+
+    def go_to(self, time: int) -> None:
+        if self.is_playing() and self.cur_audio:
+            audio_source = self._get_audio_source(audio=self.cur_audio, extra_before_options=[f'-ss {time}'])
+            self.client.source = audio_source
+
+    @staticmethod
+    def _get_audio_source(audio: Audio, extra_before_options: list | None = None, extra_options: list | None = None) -> PCMVolumeTransformer:
+        opts = copy(FFMPEG_OPTS)
+        if extra_before_options:
+            opts['before_options'] += extra_before_options
+        if extra_options:
+            opts['options'] += extra_options
+
+        before_options = ' '.join(opts['before_options'])
+        options = ' '.join(opts['options'])
+
+        audio_source = PCMVolumeTransformer(FFmpegPCMAudio(source=audio.audio_url,
+                                                            before_options=before_options,
+                                                            options=options),
+                                            volume=0.1)
+        return audio_source
 
     async def disconnect_voice(self) -> None:
         try:

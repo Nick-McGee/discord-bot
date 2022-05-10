@@ -51,11 +51,14 @@ class Audio:
             logging.error('Unable to refresh audio: %s', self.title)
             return False
 
+    def set_end_time(self, offset: int = 0) -> None:
+        self.end_time = datetime.now() + timedelta(seconds=self.length) - timedelta(seconds=offset)
+
 class AudioQueue:
     __slots__ = 'event_loop', 'max_queue_size', 'max_previous_queue_size', 'queue', 'previous_queue', '_current_audio'
 
     def __init__(self,
-                 event_loop = AbstractEventLoop,
+                 event_loop: AbstractEventLoop,
                  max_queue_size: int = 10000,
                  max_previous_queue_size: int = 100):
         self.event_loop = event_loop
@@ -76,10 +79,10 @@ class AudioQueue:
 
         self._current_audio = audio
         if self._current_audio:
-            self._current_audio.end_time = datetime.now() + timedelta(seconds=self._current_audio.length)
-            post_event(event_type='new_audio', loop=self.event_loop, data=self._current_audio)
+            self._current_audio.set_end_time()
+            post_event('new_audio', self.event_loop, self._current_audio)
         else:
-            post_event(event_type='no_audio', loop=self.event_loop)
+            post_event('no_audio', self.event_loop)
 
     async def append(self, audio: Audio) -> None:
         await self._add_to_queue(audio=audio, direction='right')
@@ -143,7 +146,7 @@ class AudioQueue:
                     self.queue.append(audio)
                     logging.error('Unknown direction \'direction\', appending to \'right\'')
                 logging.info('Audio added to queue: %s', audio)
-                post_event(event_type='queue_update', loop=self.event_loop)
+                post_event('queue_update', self.event_loop)
             else:
                 logging.error('Unable to add audio, queue size greater than %s', self.max_queue_size)
         else:
@@ -168,11 +171,11 @@ class AudioQueue:
 
     def clear_next_queue(self) -> None:
         self.queue = deque()
-        post_event(event_type='queue_update', loop=self.event_loop)
+        post_event('queue_update', self.event_loop)
 
     def clear_previous_queue(self) -> None:
         self.previous_queue = deque()
-        post_event(event_type='queue_update', loop=self.event_loop)
+        post_event('queue_update', self.event_loop)
 
     async def get_queue_as_str(self, amount: int = 5) -> str | None:
         next_audio = ''
