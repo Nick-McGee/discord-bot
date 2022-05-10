@@ -194,6 +194,7 @@ class AudioStreamer(commands.Cog):
         if ctx.author and ctx.author.voice is None:
             await ctx.respond(embed=Embed(title='Error', description='You are not connected to a voice channel', color=red),
                               delete_after=DELETE_TIMER)
+            raise commands.CommandError('User not connected to a voice channel')
 
     def change_audio(self, previous: bool = False) -> None:
         if previous:
