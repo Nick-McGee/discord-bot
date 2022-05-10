@@ -1,4 +1,4 @@
-from copy import copy
+from copy import deepcopy
 import logging
 from typing import Callable
 from asyncio import to_thread
@@ -69,7 +69,7 @@ class Voice:
 
     @staticmethod
     def _get_audio_source(audio: Audio, extra_before_options: list | None = None, extra_options: list | None = None) -> PCMVolumeTransformer:
-        opts = copy(FFMPEG_OPTS)
+        opts = deepcopy(FFMPEG_OPTS)
         if extra_before_options:
             opts['before_options'] += extra_before_options
         if extra_options:
@@ -79,8 +79,8 @@ class Voice:
         options = ' '.join(opts['options'])
 
         audio_source = PCMVolumeTransformer(FFmpegPCMAudio(source=audio.audio_url,
-                                                            before_options=before_options,
-                                                            options=options),
+                                                           before_options=before_options,
+                                                           options=options),
                                             volume=0.1)
         return audio_source
 
