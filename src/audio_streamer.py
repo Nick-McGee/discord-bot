@@ -95,9 +95,9 @@ class AudioStreamer(commands.Cog):
                           delete_after=DELETE_TIMER)
 
     @slash_command(name='go_to', description='Go to a specific time in the audio. If no time is set, the audio is reset to the start', guild_ids=[GUILD_ID])
-    @option('hour', min=0, max=100, default=0, description='Hour [optional]')
-    @option('minute', min=0, max=59, default=0, description='Minute [optional, max: 59]')
-    @option('second', min=0, max=59, default=0, description='Second [optional, max: 59]')
+    @option('hour', input_type=int, min_value=0, max_value=100, default=0, description='Hour [optional]')
+    @option('minute', input_type=int, min_value=0, max_value=59, default=0, description='Minute [optional, max: 59]')
+    @option('second', input_type=int, min_value=0, max_value=59, default=0, description='Second [optional, max: 59]')
     async def go_to(self, ctx: ApplicationContext, hour: int, minute: int, second: int) -> None:
         logging.info('Go to command invoked')
         if self.voice.is_playing():
