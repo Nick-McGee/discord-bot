@@ -31,7 +31,7 @@ class AudioStreamer(commands.Cog):
                                                     queue = self.queue)
 
     @slash_command(name='play', description='Queue YouTube audio files via a search query or URL', guild_ids=[GUILD_ID])
-    @option('query', default='', description='Search or URL', required=True)
+    @option('query', description='Search or URL', required=True)
     async def play_command(self, ctx: ApplicationContext, query: str) -> None:
         logging.info('Play command invoked')
         audio_title = await self.queue_audio(author=ctx.author,
@@ -46,7 +46,7 @@ class AudioStreamer(commands.Cog):
                               delete_after=DELETE_TIMER)
 
     @slash_command(name='play_next', description='Queue up next YouTube audio files via a search query or URL', guild_ids=[GUILD_ID])
-    @option('query', default='', description='Search or URL', required=True)
+    @option('query', description='Search or URL', required=True)
     async def play_next_command(self, ctx: ApplicationContext, query: str) -> None:
         logging.info('Play next command invoked')
         audio_title = await self.queue_audio(author=ctx.author,
@@ -62,7 +62,7 @@ class AudioStreamer(commands.Cog):
                               delete_after=DELETE_TIMER)
 
     @slash_command(name='playlist', description='Queue a series of audio files from a YouTube Playlist URL', guild_ids=[GUILD_ID])
-    @option('url', default='', description='A playlist URL', required=True)
+    @option('url', description='A playlist URL', required=True)
     async def playlist_command(self, ctx: ApplicationContext, url: str) -> None:
         logging.info('Playlist command invoked')
         playlist = get_playlist(playlist_url=url)

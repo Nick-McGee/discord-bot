@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Coroutine
+from typing import Coroutine
 from asyncio import AbstractEventLoop, iscoroutinefunction
 
 subscribers = {}

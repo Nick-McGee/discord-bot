@@ -85,10 +85,10 @@ class AudioQueue:
             post_event('no_audio', self.event_loop)
 
     async def append(self, audio: Audio) -> None:
-        await self._add_to_queue(audio=audio, direction='right')
+        await self._add_to_queue(audio=audio)
 
     async def append_left(self, audio: Audio) -> None:
-        await self._add_to_queue(audio=audio, direction='left')
+        await self._add_to_queue(audio=audio, add_to_start=True)
 
     def get_current_audio(self) -> Audio | None:
         return self.current_audio
@@ -133,25 +133,23 @@ class AudioQueue:
         self.previous_queue = deque()
         self.get_next_audio()
 
-    async def _add_to_queue(self, audio: Audio, direction: str = 'right'):
+    async def _add_to_queue(self, audio: Audio, add_to_start: bool = False) -> None:
         if isinstance(audio, Audio):
             if self._is_below_max_queue_size():
-                if direction == 'right':
-                    self.queue.append(audio)
-                    if self.current_audio is None:
-                        self.get_next_audio()
-                elif direction == 'left':
+                if add_to_start:
                     self.queue.appendleft(audio)
                 else:
                     self.queue.append(audio)
-                    logging.error('Unknown direction \'direction\', appending to \'right\'')
+
                 logging.info('Audio added to queue: %s', audio)
-                post_event('queue_update', self.event_loop)
+                if self.current_audio is None:
+                    self.get_next_audio()
+                else:
+                    post_event('queue_update', self.event_loop)
             else:
                 logging.error('Unable to add audio, queue size greater than %s', self.max_queue_size)
         else:
             logging.error('Unable to add audio: Not an Audio object')
-
     def _is_below_max_queue_size(self) -> bool:
         return len(self.queue) < self.max_queue_size
 
