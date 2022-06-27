@@ -4,6 +4,7 @@ from requests import head, ConnectionError
 from youtube_dl import YoutubeDL as yt
 from youtube_dl import DownloadError
 from pytube import Playlist
+from urlvalidator import validate_url, ValidationError
 
 import config.logger
 
@@ -31,12 +32,19 @@ def _get_entry_from_youtube(query: str) -> dict | None:
     while entry is None and tries > 0:
         with yt({'format': 'bestaudio', 'age_limit': 21, 'noplaylist': 'True', 'cookiefile': 'config/youtube.com_cookies.txt'}) as ytdl:
             try:
-                info = ytdl.extract_info(f'ytsearch:{query}', download=False)
-                first_entry = info['entries'][0]
-                status_code = head(first_entry['url']).status_code
-                logging.info('Query status code: %s', status_code)
-                if status_code == 200:
-                    entry = first_entry
+                if __is_url(query):
+                    logging.info('Queuing by URL')
+                    info = ytdl.extract_info(query, download=False)
+                    entry = info
+                else:
+                    logging.info('Queuing by search')
+                    info = ytdl.extract_info(f'ytsearch:{query}', download=False)
+                    first_entry = info['entries'][0]
+                    status_code = head(first_entry['url']).status_code
+                    logging.info('Query status code: %s', status_code)
+                    if status_code == 200:
+                        entry = first_entry
+
             except (TypeError, IndexError) as type_index_error:
                 logging.error('No entries found: %s', type_index_error)
             except KeyError as key_error:
@@ -49,3 +57,15 @@ def _get_entry_from_youtube(query: str) -> dict | None:
                 tries -= 1
 
     return entry
+
+
+@staticmethod
+def __is_url(query):
+    is_url = False
+    try:
+        validate_url(query)
+        logging.debug('%s is a URL', query)
+        is_url = True
+    except ValidationError:
+        logging.debug('%s not a URL', query)
+    return is_url
