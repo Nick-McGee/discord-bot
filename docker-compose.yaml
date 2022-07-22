@@ -1,0 +1,8 @@
+services:
+  python-bot:
+    build: .
+    environment:
+      - BOT_TOKEN=${BOT_TOKEN}
+      - GUILD_ID=${GUILD_ID}
+    container_name: python-bot
+    command: python src/bot.py

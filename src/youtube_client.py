@@ -1,3 +1,4 @@
+import os
 import logging
 
 from requests import head, ConnectionError
@@ -30,7 +31,7 @@ def _get_entry_from_youtube(query: str) -> dict | None:
     tries = 3
 
     while entry is None and tries > 0:
-        with yt({'format': 'bestaudio', 'age_limit': 21, 'noplaylist': 'True', 'cookiefile': 'config/youtube.com_cookies.txt'}) as ytdl:
+        with yt({'format': 'bestaudio', 'age_limit': 21, 'noplaylist': 'True', 'cookiefile': f"{os.path.join(os.path.dirname(__file__))}/config/youtube.com_cookies.txt"}) as ytdl:
             try:
                 if __is_url(query):
                     logging.info('Queuing by URL')
