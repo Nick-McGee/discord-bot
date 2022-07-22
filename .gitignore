@@ -1,7 +1,7 @@
+tokens.txt
 .env
 .venv
 .pytest_cache
 .vscode
 __pycache__
-auth.py
 youtube.com_cookies.txt
