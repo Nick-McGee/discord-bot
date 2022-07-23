@@ -24,7 +24,13 @@ This is a Discord bot built on <a href="https://github.com/Pycord-Development/py
 
 ### UI
 
-## Demo
+<div align="center">
+
+![A screenshot showing the bot's UI, with the song title, time remaining, image, queue, and the back and forth buttons.](/screenshots/ui.png?raw=true "A screenshot showing the bot's UI")
+
+</div>
+
+### Demo
 
 <div align="center">
 
