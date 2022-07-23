@@ -1,8 +1,6 @@
 import os
 import logging
 
-import yt_dlp
-
 from requests import head, ConnectionError
 from yt_dlp import YoutubeDL as yt
 from yt_dlp import DownloadError
