@@ -1,4 +1,3 @@
-import os
 import logging
 
 from requests import head, ConnectionError
@@ -29,8 +28,6 @@ def get_playlist(playlist_url: str) -> Playlist:
 def _get_entry_from_youtube(query: str) -> dict | None:
     entry = None
     tries = 3
-
-# 'cookiefile': f"{os.path.join(os.path.dirname(__file__))}/config/youtube.com_cookies.txt"
 
     while entry is None and tries > 0:
         with yt({'format': 'bestaudio', 'age_limit': 21, 'noplaylist': 'True'}) as ytdl:
