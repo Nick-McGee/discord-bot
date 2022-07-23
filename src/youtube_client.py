@@ -1,9 +1,11 @@
 import os
 import logging
 
+import yt_dlp
+
 from requests import head, ConnectionError
-from youtube_dl import YoutubeDL as yt
-from youtube_dl import DownloadError
+from yt_dlp import YoutubeDL as yt
+from yt_dlp import DownloadError
 from pytube import Playlist
 from urlvalidator import validate_url, ValidationError
 
@@ -30,8 +32,10 @@ def _get_entry_from_youtube(query: str) -> dict | None:
     entry = None
     tries = 3
 
+# 'cookiefile': f"{os.path.join(os.path.dirname(__file__))}/config/youtube.com_cookies.txt"
+
     while entry is None and tries > 0:
-        with yt({'format': 'bestaudio', 'age_limit': 21, 'noplaylist': 'True', 'cookiefile': f"{os.path.join(os.path.dirname(__file__))}/config/youtube.com_cookies.txt"}) as ytdl:
+        with yt({'format': 'bestaudio', 'age_limit': 21, 'noplaylist': 'True'}) as ytdl:
             try:
                 if __is_url(query):
                     logging.info('Queuing by URL')
