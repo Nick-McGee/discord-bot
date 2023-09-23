@@ -29,5 +29,5 @@ urllib3==1.26.9
 urlvalidator==0.1
 websockets==10.3
 wrapt==1.14.1
-yarl==1.7.2
-yt-dlp==2023.02.17
+yarl==1.9.2
+yt-dlp==2023.07.06
